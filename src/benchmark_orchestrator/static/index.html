@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Benchmark Orchestrator</title>
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  </script>
   <link rel="stylesheet" href="/styles.css">
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script defer src="/app.js"></script>
@@ -22,6 +25,9 @@
     </div>
     <button class="icon-button mobile-runs-button" id="mobileRunsButton" type="button" title="运行记录" aria-label="运行记录">
       <i data-lucide="list"></i>
+    </button>
+    <button class="icon-button" id="themeButton" type="button" title="切换深浅色" aria-label="切换深浅色">
+      <i data-lucide="sun-moon"></i>
     </button>
     <button class="icon-button" id="refreshButton" type="button" title="刷新" aria-label="刷新">
       <i data-lucide="refresh-cw"></i>
@@ -45,16 +51,19 @@
       <section id="createView" class="view create-view">
         <div class="view-title">
           <div>
-            <span class="eyebrow">NEW EXPERIMENT</span>
+            <span class="eyebrow">NEW EXPERIMENT / CONTROL SURFACE</span>
             <h1>创建 Benchmark Run</h1>
+            <p>配置一次可复现的模型评测。</p>
           </div>
           <span class="schema-tag">SPEC / V1</span>
         </div>
 
         <form id="runForm">
           <div class="form-band identity-band">
-            <label>运行名称<input name="name" type="text" maxlength="120" placeholder="rdkit-skills-comparison"></label>
-            <label>模型<input name="model" type="text" maxlength="200" value="qwen3.5-plus" required></label>
+            <label>运行名称<input id="derivedRunName" type="text" value="正在读取模型配置…" readonly></label>
+            <label>模型
+              <select name="model" id="modelSelect" required disabled><option value="">正在读取 OpenClaw 配置…</option></select>
+            </label>
             <label>Thinking
               <select name="thinking">
                 <option>off</option><option>minimal</option><option>low</option><option>medium</option><option selected>high</option><option>xhigh</option>

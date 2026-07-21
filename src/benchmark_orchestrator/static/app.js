@@ -19,11 +19,30 @@ function toast(message, error = false) {
 function requestId() { return crypto.randomUUID(); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
 function short(value, length = 12) { const text = String(value || ""); return text.length > length ? text.slice(0, length) : text || "—"; }
+function slug(value) { return String(value || "item").trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "item"; }
+
+function updateRunName() {
+  const datasets = [...document.querySelectorAll("[name=datasets]:checked")].map((input) => input.value);
+  const dataset = datasets.length === 1 ? datasets[0] : datasets.length > 1 ? "mixed-datasets" : "dataset";
+  const model = $("#modelSelect").value.split("/").at(-1) || "model";
+  $("#derivedRunName").value = `${slug(dataset)}-${slug(model)}-{启动时间}`;
+}
+
+function renderModels(models, defaultModel) {
+  const select = $("#modelSelect");
+  select.innerHTML = models.length
+    ? models.map((model) => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.label)} · ${escapeHtml(model.provider)}</option>`).join("")
+    : '<option value="">未发现可用模型</option>';
+  select.disabled = models.length === 0;
+  if (models.some((model) => model.id === defaultModel)) select.value = defaultModel;
+  updateRunName();
+}
 
 async function loadCapabilities() {
   try {
     const payload = await api("/api/capabilities");
     state.capabilities = payload;
+    renderModels(payload.models || [], payload.default_model);
     $("#runtimeSignal").className = `runtime-signal ${payload.ready ? "ready" : "failed"}`;
     $("#runtimeLabel").textContent = payload.ready ? `Runtime ready · VGB ${payload.vgb_release.version}` : "Runtime preflight failed";
     $("#runtimeRevision").textContent = payload.runtime_revision ? payload.runtime_revision.slice(0, 10) + (payload.runtime_dirty ? " · dirty" : "") : "revision unknown";
@@ -70,7 +89,7 @@ function formSpec() {
   const retries = Number(form.get("timeout_retries"));
   return {
     schema_version: 1,
-    name: String(form.get("name") || "").trim() || null,
+    name: null,
     groups: form.getAll("groups"),
     datasets: form.getAll("datasets"),
     selection: { record_ids: recordIds, offset: Number(form.get("offset") || 0), limit: form.get("limit") ? Number(form.get("limit")) : null },
@@ -221,6 +240,11 @@ async function command(kind) {
 }
 
 function initialize() {
+  $("#themeButton").addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("bo-theme", theme);
+  });
   $("#runForm").addEventListener("submit", previewRun);
   $("#startButton").addEventListener("click", startRun);
   $("#homeButton").addEventListener("click", showCreate);
@@ -232,6 +256,8 @@ function initialize() {
   $("#cancelButton").addEventListener("click", () => command("cancel"));
   $("#resumeButton").addEventListener("click", () => command("resume"));
   $("#noTimeout").addEventListener("change", (event) => { $("[name=timeout_seconds]").disabled = event.target.checked; });
+  $("#modelSelect").addEventListener("change", updateRunName);
+  document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", updateRunName));
   window.addEventListener("load", () => { if (window.lucide) window.lucide.createIcons(); });
   Promise.all([loadCapabilities(), loadRuns()]);
 }

@@ -93,6 +93,49 @@ class CanonicalCliRuntimeAdapter:
         )
 
     @property
+    def openclaw_config_path(self) -> Path:
+        configured = os.environ.get("OPENCLAW_CONFIG_PATH")
+        if configured:
+            return Path(configured).expanduser().resolve()
+        return self.workspace_root.parent / "openclaw.json"
+
+    def model_catalog(self) -> tuple[list[dict[str, str]], str]:
+        path = self.openclaw_config_path
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            defaults = payload["agents"]["defaults"]
+            configured_models = defaults["models"]
+            default_model = defaults["model"]["primary"]
+            if not isinstance(configured_models, dict) or not configured_models:
+                raise TypeError("agents.defaults.models must be a non-empty mapping")
+            if not isinstance(default_model, str) or not default_model.strip():
+                raise TypeError("agents.defaults.model.primary must be a string")
+            models = []
+            for model_id, settings in configured_models.items():
+                if not isinstance(model_id, str) or not model_id.strip():
+                    raise TypeError("model ids must be non-empty strings")
+                alias = settings.get("alias") if isinstance(settings, dict) else None
+                provider, _, short_id = model_id.partition("/")
+                models.append(
+                    {
+                        "id": model_id,
+                        "label": alias.strip()
+                        if isinstance(alias, str) and alias.strip()
+                        else short_id or model_id,
+                        "provider": provider if short_id else "default",
+                    }
+                )
+            if default_model not in configured_models:
+                raise ValueError("primary model is not present in agents.defaults.models")
+            return models, default_model
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise OrchestratorError(
+                "runtime_unavailable",
+                f"Invalid OpenClaw model config at {path}: {exc}",
+                status_code=503,
+            ) from exc
+
+    @property
     def base_argv(self) -> tuple[str, ...]:
         return (
             *CLI_PREFIX,
@@ -205,6 +248,12 @@ class CanonicalCliRuntimeAdapter:
         except OrchestratorError as exc:
             release = {"version": "unknown", "wheel_sha256": "", "datasets": []}
             check("vgb_release", False, exc.message)
+        try:
+            models, default_model = self.model_catalog()
+            check("openclaw_models", True, f"{len(models)} models from {self.openclaw_config_path}")
+        except OrchestratorError as exc:
+            models, default_model = [], ""
+            check("openclaw_models", False, exc.message)
         revision, dirty = await self.runtime_revision()
         return {
             "schema_version": 1,
@@ -215,7 +264,8 @@ class CanonicalCliRuntimeAdapter:
             "groups": list(MVP_GROUPS),
             "datasets": release["datasets"],
             "thinking_levels": list(THINKING_LEVELS),
-            "default_model": "qwen3.5-plus",
+            "models": models,
+            "default_model": default_model,
             "vgb_release": {
                 "version": release["version"],
                 "wheel_sha256": release["wheel_sha256"],

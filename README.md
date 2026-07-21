@@ -33,9 +33,11 @@ uv run python -m benchmark_orchestrator.app \
 uv run --project <workspace_root> python -m benchmarking.workflow.cli
 ```
 
-浏览器输入只会映射到白名单参数。Orchestrator 不使用 shell，不执行 `openclaw agent`，不设置跨仓库
-`PYTHONPATH`，也不读取或改写 runtime credential/config。执行 artifacts 由 canonical CLI 单写；控制
-sidecar 位于独立 `control_root`，使用原子替换和最小文件权限。
+浏览器输入只会映射到白名单参数。Orchestrator 不使用 shell，不执行 `openclaw agent`，也不设置跨仓库
+`PYTHONPATH`。模型下拉只读取 OpenClaw 配置中的 `agents.defaults.models` 与 primary model；API 不返回、
+也不改写 provider 凭据或其他 runtime 配置。执行 artifacts 由 canonical CLI 单写；控制 sidecar 位于
+独立 `control_root`，使用原子替换和最小文件权限。可通过 `OPENCLAW_CONFIG_PATH` 指定配置文件，默认
+读取 workspace 同级的 `openclaw.json`。
 
 Resume 复用冻结 spec、相同 `--exact-output-dir` 和 `--merge-existing-per-record`。任何可解析的现有
 per-record，包括失败结果，都会保留并跳过；损坏 checkpoint 会阻止 Resume。
