@@ -2,13 +2,13 @@
 
 - 状态：`REVISED`
 - 修订日期：2026-07-21
-- 实现目标：在现有 OpenClaw benchmark dashboard 中增加本地控制面
+- 实现目标：在独立 Benchmark Orchestrator 仓库中提供本地控制面，调用外部 OpenClaw benchmark runtime
 
 ## 1. 技术目标
 
 1. 通过结构化 Run Spec 安全构造 canonical benchmark CLI；
 2. 监督完整 CLI invocation，而不是重新实现 task runner；
-3. 复用现有 progress、per-record、results 和 dashboard 查询；
+3. 复用外部 runtime 的 progress、per-record、results artifact contract；
 4. 提供可恢复的 create/start/cancel/resume 控制状态；
 5. 不复制 OpenClaw session/workspace、VGB scorer 或 record checkpoint 状态；
 6. 使实现可通过不调用模型的 contract/integration test 验证。
@@ -20,19 +20,20 @@ stream、分布式 worker 和原地重跑已落盘失败 record。
 
 ### 2.1 关键模块
 
-| 现有路径 | 能力 |
+| 所属/路径 | 能力 |
 | --- | --- |
-| `benchmarking/workflow/cli.py` | canonical parser、selector、groups、waves、aggregate、Resume merge |
-| `benchmarking/workflow/runners/single_llm.py` | OpenClaw single-LLM attempts、retry、answer contract |
-| `benchmarking/runtime/single_llm_openclaw_wrapper.py` | `openclaw agent --local`、JSON/transcript recovery |
-| `benchmarking/runtime/agent_workspace.py` | attempt workspace、audit、archive/quarantine |
-| `benchmarking/runtime/session_isolation.py` | session isolation/postflight |
-| `benchmarking/runtime/config_pool.py` | run-scoped OpenClaw configs |
-| `benchmarking/runtime/cleanroom.py` | atexit、SIGINT/SIGTERM cleanup |
-| `benchmarking/scoring/verifier_grounded_runtime.py` | pinned isolated VGB runtime |
-| `benchmarking/dashboard/progress.py` | progress event/snapshot writer 与 reconciliation |
-| `benchmarking/dashboard/service.py` | Run/record/artifact read model |
-| `benchmarking/dashboard/app.py` | FastAPI/static GUI/annotation routes |
+| OpenClaw `benchmarking/workflow/cli.py` | canonical parser、selector、groups、waves、aggregate、Resume merge |
+| OpenClaw `benchmarking/workflow/runners/single_llm.py` | OpenClaw single-LLM attempts、retry、answer contract |
+| OpenClaw `benchmarking/runtime/single_llm_openclaw_wrapper.py` | `openclaw agent --local`、JSON/transcript recovery |
+| OpenClaw `benchmarking/runtime/agent_workspace.py` | attempt workspace、audit、archive/quarantine |
+| OpenClaw `benchmarking/runtime/session_isolation.py` | session isolation/postflight |
+| OpenClaw `benchmarking/runtime/config_pool.py` | run-scoped OpenClaw configs |
+| OpenClaw `benchmarking/runtime/cleanroom.py` | atexit、SIGINT/SIGTERM cleanup |
+| OpenClaw `benchmarking/scoring/verifier_grounded_runtime.py` | pinned isolated VGB runtime |
+| OpenClaw `benchmarking/dashboard/progress.py` | progress event/snapshot writer 与 reconciliation |
+| OpenClaw `benchmarking/dashboard/service.py` | 现有 dashboard read model（Orchestrator 不 import） |
+| OpenClaw `benchmarking/dashboard/app.py` | 现有 FastAPI/static GUI/annotation routes（可选） |
+| Orchestrator `src/benchmark_orchestrator/*` | control API、GUI、runtime adapter、ArtifactReader、registry、supervisor |
 
 ### 2.2 已验证命令
 
@@ -50,7 +51,7 @@ result schema `2`；OpenClaw 结果 writer 的 schema 仍为 `3`。
 
 ```bash
 cd ~/.openclaw/workspace
-uv run python -m benchmarking.workflow.cli \
+uv run --project ~/.openclaw/workspace python -m benchmarking.workflow.cli \
   --groups single_llm_skills_on \
   --datasets verifier_grounded_rdkit \
   --list-datasets
@@ -59,90 +60,104 @@ uv run python -m benchmarking.workflow.cli \
 无模型调用预览：
 
 ```bash
-uv run python -m benchmarking.workflow.cli \
+uv run --project ~/.openclaw/workspace python -m benchmarking.workflow.cli \
   --groups single_llm_skills_on \
   --datasets verifier_grounded_rdkit \
   --record-ids rdkit_qed_max_001 \
   --print-selected-records
 ```
 
-启动已有 dashboard：
+启动 Orchestrator GUI/API（独立仓库）：
 
 ```bash
+cd /Users/xutao/Benchmark-Orchestrator
+uv run python -m benchmark_orchestrator.app --config ~/.benchmark-orchestrator/orchestrator.yaml
+```
+
+OpenClaw 原有 dashboard 仍可独立启动，用于兼容性对照：
+
+```bash
+cd ~/.openclaw/workspace
 uv run --extra web-ui python -m benchmarking.dashboard.app
 ```
 
 ## 3. 技术栈
 
-服从现有 OpenClaw workspace 的 `pyproject.toml` 和 `uv.lock`：
+Orchestrator 使用自己的 `pyproject.toml`/`uv.lock`；被调用的 OpenClaw workspace 继续使用自己的
+`pyproject.toml`/`uv.lock`。两套环境不得通过源码 import 或 `PYTHONPATH` 合并：
 
 | 层 | 技术 |
 | --- | --- |
-| Runtime | Python `>=3.12`，`uv` |
+| Orchestrator runtime | Python `>=3.12`，`uv` |
 | API | FastAPI `0.135.3`，Uvicorn `0.44.0` |
 | Schema | Pydantic v2 |
 | YAML | PyYAML `6.0.3`，只使用 `safe_load`/`safe_dump` |
-| Frontend | 现有 static HTML/JavaScript/CSS |
+| Frontend | Orchestrator 自有 static HTML/JavaScript/CSS |
 | Process | `asyncio.create_subprocess_exec`、POSIX signal/process group |
 | Execution state | 现有 JSON/JSONL artifacts |
 | Control state | 原子写 JSON/YAML sidecar |
-| Annotation | 现有 dashboard SQLite，仅用于 annotation/metadata |
+| Annotation | Orchestrator 自己的可选 SQLite，仅用于 annotation/metadata；不存 execution state |
 
 不新增 SQLAlchemy、Alembic、TanStack Query 或 plugin framework。
 
 ## 4. 项目目录结构
 
-MVP 代码与现有 `benchmarking` package 同仓：
+完整 MVP 位于独立仓库 `/Users/xutao/Benchmark-Orchestrator`，OpenClaw workspace 是外部执行依赖：
 
 ```text
-~/.openclaw/workspace/
-├── benchmarking/
-│   ├── control/                         # 新增
-│   │   ├── __init__.py
-│   │   ├── api.py                       # control FastAPI routes
-│   │   ├── config.py                    # orchestrator.yaml
-│   │   ├── models.py                    # RunSpec/control/invocation models
-│   │   ├── registry.py                  # atomic sidecar store
-│   │   ├── runtime_adapter.py            # canonical CLI argv/capabilities
-│   │   ├── service.py                    # create/cancel/resume use cases
-│   │   └── supervisor.py                 # local process supervision
-│   ├── dashboard/
-│   │   ├── app.py                       # 挂载新增 routes
-│   │   ├── service.py                   # 保持 execution artifact read-only
-│   │   ├── progress.py                  # 复用，不另写 progress parser
-│   │   └── static/                      # 增加创建/取消/Resume UI
-│   ├── workflow/                        # 现有，不绕过
-│   ├── runtime/                         # 现有，不绕过
-│   └── scoring/                         # 现有，不绕过
-├── state/
-│   ├── benchmark-runs/                  # existing CLI owns
-│   │   ├── formal/<benchmark>/<model>/<run-id>/
-│   │   └── temporary/<benchmark>/<model>/<run-id>/
-│   ├── benchmark-orchestrator/           # new control plane owns
-│   │   ├── backend.lock
-│   │   ├── previews/<preview-id>.json
-│   │   └── runs/<run-id>/
-│   │       ├── spec.yaml
-│   │       ├── preview.json
-│   │       ├── control.json
-│   │       └── invocations/<invocation-id>/launcher.log
-│   └── benchmark-dashboard/dashboard.sqlite
-├── tests/
-│   └── benchmarking/control/             # new tests
-└── pyproject.toml
+/Users/xutao/Benchmark-Orchestrator/
+├── pyproject.toml                       # Orchestrator 自己的依赖和发布元数据
+├── uv.lock
+├── src/benchmark_orchestrator/
+│   ├── __init__.py
+│   ├── app.py                            # standalone FastAPI/static GUI entrypoint
+│   ├── api.py                            # control/read routes
+│   ├── config.py                         # orchestrator.yaml
+│   ├── models.py                         # RunSpec/control/invocation models
+│   ├── registry.py                       # atomic control sidecar store
+│   ├── runtime_adapter.py                # external canonical CLI argv/capabilities
+│   ├── artifacts.py                      # versioned read-only OpenClaw artifact contract
+│   ├── service.py                         # create/cancel/resume use cases
+│   ├── supervisor.py                      # local process supervision
+│   └── static/                            # Orchestrator GUI
+├── tests/benchmark_orchestrator/
+├── docs/                                  # copied/referenced design docs and runtime contracts
+└── README.md
+
+~/.openclaw/workspace/                    # external OpenClaw repository/workspace
+├── benchmarking/workflow/cli.py          # canonical execution entrypoint (owned by OpenClaw)
+├── benchmarking/runtime/                 # runner, wrapper, isolation, scorer bridge
+├── benchmarking/dashboard/               # optional existing read-only dashboard
+├── benchmarking/resources/verifier_grounded/release.json
+└── state/benchmark-runs/                  # execution artifacts owned by canonical CLI
+    ├── formal/<benchmark>/<model>/<run-id>/
+    └── temporary/<benchmark>/<model>/<run-id>/
 ```
 
-`/Users/xutao/Benchmark-Orchestrator` 首版保留设计文档；不在这个 checkout 中复制一份 dashboard 或
-通过绝对路径 import OpenClaw workspace。若项目以后需要独立发布，应先稳定并版本化执行面边界。
+OpenClaw 仓库可以增加 `benchmarking` 下的轻量 integration scaffold（例如 artifact fixture、
+capability export 或 contract test），但不得放入 Orchestrator 的完整 API、GUI、registry、service
+或 supervisor。Orchestrator 的 `control_root` 默认位于独立的
+`~/.benchmark-orchestrator/state`，不嵌套到 OpenClaw checkout。
+
+### 4.1 独立项目交付物
+
+- 发布项目名为 `benchmark-orchestrator`，源码和 wheel 只包含 `benchmark_orchestrator` 包及其 static
+  GUI，不 vendoring OpenClaw 或 VGB 源码；
+- 每个 Orchestrator release 记录兼容的 OpenClaw runtime revision、canonical CLI contract 版本和 VGB
+  release identity；这些信息用于启动 preflight 与 Resume drift 检查；
+- 安装 Orchestrator 后，用户通过配置提供 `workspace_root`，不要求把 Orchestrator checkout 复制到
+  OpenClaw workspace，也不要求向 OpenClaw 的 `pyproject.toml` 增加 Orchestrator 依赖；
+- OpenClaw 侧 integration scaffold 可随 OpenClaw 发布，但其版本不等同于 Orchestrator release，跨仓库
+  兼容性由 contract test 验证。
 
 ## 5. Python 包划分
 
-### 5.1 `benchmarking.control.models`
+### 5.1 `benchmark_orchestrator.models`
 
 仅放不可变用户意图和控制状态模型：`RunSpec`、`SelectionSpec`、`AgentSpec`、`ExecutionSpec`、
 `RunControl`、`Invocation`、`SelectedRecord`。不复制 `GroupRecordResult`。
 
-### 5.2 `benchmarking.control.runtime_adapter`
+### 5.2 `benchmark_orchestrator.runtime_adapter`
 
 负责：
 
@@ -155,19 +170,19 @@ MVP 代码与现有 `benchmarking` package 同仓：
 
 它不 import runner、wrapper 或 VGB package，也不解析 `openclaw agent` stdout。
 
-### 5.3 `benchmarking.control.supervisor`
+### 5.3 `benchmark_orchestrator.supervisor`
 
 负责 process handle、PID/PGID、stdout/stderr、signal、wait 和启动恢复。它只知道
 `RuntimeCommand`，不知道 dataset、record 或 verifier score。
 
-### 5.4 `benchmarking.control.registry`
+### 5.4 `benchmark_orchestrator.registry`
 
 负责 control root containment、原子写、单 Run lock 和 sidecar 读取。它不扫描 per-record；execution
-artifact 查询仍由 `BenchmarkDashboard` 完成。
+artifact 查询由 Orchestrator 的 `ArtifactReader` 按外部 runtime contract 完成。
 
-### 5.5 `benchmarking.control.service`
+### 5.5 `benchmark_orchestrator.service`
 
-组合 adapter、supervisor、registry 和 dashboard read model，实现业务不变量：
+组合 adapter、supervisor、registry 和 `ArtifactReader`，实现业务不变量：
 
 - preview 后才能创建；
 - run ID/output path 唯一；
@@ -176,7 +191,7 @@ artifact 查询仍由 `BenchmarkDashboard` 完成。
 - completed/无缺失项 Run 不 Resume；
 - Cancel/Resume 幂等和状态冲突处理。
 
-### 5.6 `benchmarking.control.api`
+### 5.6 `benchmark_orchestrator.api`
 
 只做 Pydantic request/response、错误映射和 HTTP routing。不得在 route 内拼 argv、发 signal 或修改
 sidecar。
@@ -335,7 +350,7 @@ class TaskView(BaseModel):
 
 1. frozen preview 确定 selected pair；
 2. 对应 per-record 不存在：`missing`；
-3. 文件存在且现有 dashboard reader 可解析：`committed`；
+3. 文件存在且 Orchestrator `ArtifactReader` 可按 runtime contract 解析：`committed`；
 4. 文件存在但不可解析：`invalid`，Run failed，禁止自动覆盖；
 5. result 中沿用 runtime schema v3 的全部独立状态轴；
 6. 历史 schema v2 由现有 compatibility path 读取，不在 TaskView 重复升级。
@@ -374,7 +389,7 @@ class WorkspaceView(BaseModel):
 | record checkpoint/result | `per-record/...json` | canonical CLI |
 | runtime progress | `progress/state.json`, `events.jsonl` | `ProgressWriter` |
 | aggregate/report | `results.json`, `runtime-manifest.json` | canonical CLI |
-| annotation | existing dashboard SQLite | AnnotationStore |
+| annotation | Orchestrator annotation SQLite（可选） | AnnotationStore |
 
 不建立一张同时复制这些字段的 Run/Task SQLite 表。
 
@@ -430,7 +445,7 @@ fragment。若以后暴露额外 canonical 参数，必须同时增加 schema、
 
 ```python
 def build_command(spec: FrozenRun, *, preview: bool, resume: bool) -> RuntimeCommand:
-    argv = ["uv", "run", "python", "-m", "benchmarking.workflow.cli"]
+    argv = ["uv", "run", "--project", str(workspace_root), "python", "-m", "benchmarking.workflow.cli"]
     argv += ["--groups", ",".join(spec.spec.groups)]
     argv += ["--datasets", ",".join(spec.spec.datasets)]
 
@@ -509,7 +524,7 @@ verifier-grounded-rdkit-qwen3-5-plus-20260721-153000
 - `run_id = <benchmark>-<model>-<YYYYMMDD-HHMMSS>`；
 - slug 只允许 ASCII 小写字母、数字和 `-`；
 - `output_dir = resolve(run_root / category / benchmark / model / run_id)` 且必须 containment；
-- run ID 在整个递归 run root 下必须唯一，否则现有 dashboard 会按 basename 查询时报 ambiguous；
+- run ID 在整个递归 run root 下必须唯一，否则 ArtifactReader 或现有 OpenClaw dashboard 会按 basename 查询时报 ambiguous；
 - 已存在非空 output/control 目录时拒绝 create，不自动覆盖。
 
 ## 9. 日志流与进度
@@ -538,10 +553,10 @@ error
 run_completed
 ```
 
-`events.jsonl` append，`state.json` 保存 dashboard-friendly snapshot。写入由进程内 lock 串行化，
+`events.jsonl` append，`state.json` 保存 GUI-friendly snapshot。写入由进程内 lock 串行化，
 但事件没有全局 sequence ID；MVP 不用它做 exactly-once 消息总线。
 
-Resume 会启动新的 `ProgressWriter`：新的 invocation 追加 events，并重写 snapshot；dashboard 已经把
+Resume 会启动新的 `ProgressWriter`：新的 invocation 追加 events，并重写 snapshot；ArtifactReader 会把
 snapshot 与现存 per-record 文件 reconciliation。因此 UI 必须读 `/progress` snapshot，不能只计算
 本次 invocation 的 event 行数。
 
@@ -597,8 +612,8 @@ Resume 不保证：
 
 ```python
 selected = set(frozen_run.selected_pairs)
-committed = dashboard.list_committed_pairs(run_id)
-invalid = dashboard.list_invalid_checkpoint_pairs(run_id)
+committed = artifact_reader.list_committed_pairs(run_id)
+invalid = artifact_reader.list_invalid_checkpoint_pairs(run_id)
 missing = selected - committed
 ```
 
@@ -607,8 +622,8 @@ missing = selected - committed
 - existing failure payload 只要可解析即属于 committed；
 - 不能通过控制 API 删除/改名 per-record 来制造 missing。
 
-如果现有 `BenchmarkDashboard` 暂无 `list_committed_pairs`，新增的 helper 只能复用其受控 run root 和
-JSON 解析规则，不能建立第二个 schema upconverter。
+如果 ArtifactReader 暂无 `list_committed_pairs`，新增 helper 只能复用已声明的 runtime artifact
+contract 和受控 run root，不能建立第二个 schema upconverter。
 
 ### 10.3 Resume 算法
 
@@ -651,7 +666,7 @@ Resume 必须重用 frozen spec。若 VGB version/hash 变化，直接拒绝；�
 ### 10.5 Progress 重建注意事项
 
 canonical CLI 的 `--merge-existing-per-record` 根据文件存在性跳过，并在结束时从 per-record 重建
-aggregate。Orchestrator 不预先编辑 `progress/state.json` 或 `results.json`。运行中的 dashboard
+aggregate。Orchestrator 不预先编辑 `progress/state.json` 或 `results.json`。运行中的 ArtifactReader
 reconciliation 负责把旧 checkpoints 与新 snapshot 合并显示。
 
 ## 11. Cancel 与启动恢复
@@ -724,7 +739,8 @@ Bootstrap 显式构造唯一 runtime adapter：
 ```python
 runtime_adapter = CanonicalCliRuntimeAdapter(config.workspace_root)
 supervisor = LocalRunSupervisor(config, registry)
-service = RunService(runtime_adapter, supervisor, registry, dashboard)
+artifact_reader = ArtifactReader(config.run_root)
+service = RunService(runtime_adapter, supervisor, registry, artifact_reader)
 ```
 
 OpenClaw integration 继续由 canonical runtime 内部的 `SingleLLMRunner` 和 wrapper 提供。
@@ -750,11 +766,11 @@ schema_version: 1
 
 workspace_root: /Users/xutao/.openclaw/workspace
 run_root: /Users/xutao/.openclaw/workspace/state/benchmark-runs
-control_root: /Users/xutao/.openclaw/workspace/state/benchmark-orchestrator
+control_root: /Users/xutao/.benchmark-orchestrator/state
 
 http:
   host: 127.0.0.1
-  port: 8765
+  port: 8875
   poll_interval_ms: 1000
 
 launcher:
@@ -843,9 +859,10 @@ benchmark_python_path
 
 ## 14. API 设计
 
-### 14.1 复用现有 API
+### 14.1 Orchestrator read API
 
-现有路径保持兼容：
+Orchestrator 提供与现有 artifact 语义一致的 read API。OpenClaw 仓库中的 dashboard API 仍保持原状，
+但不是 Orchestrator 的进程内依赖：
 
 | Method | Path | 作用 |
 | --- | --- | --- |
@@ -856,7 +873,7 @@ benchmark_python_path
 | GET | `/api/runs/{run_id}/records/{record_id}` | record 详情 |
 | GET | `/api/runs/{run_id}/progress` | reconciled progress |
 | GET | `/api/runs/{run_id}/assets/{asset_path}` | 受控 artifact |
-| POST/PATCH/DELETE | `/api/annotations...` | annotation |
+| POST/PATCH/DELETE | `/api/annotations...` | Orchestrator annotation/metadata（可选） |
 
 ### 14.2 新增控制 API
 
@@ -870,7 +887,8 @@ benchmark_python_path
 | POST | `/api/runs/{run_id}/resume` | 缺失项 Resume，`202` |
 | GET | `/api/runs/{run_id}/control/log` | launcher log 分页 |
 
-FastAPI 允许同一路径同时存在现有 GET/PATCH 和新增 POST，不改变 read API。
+Orchestrator 在自己的 FastAPI app 中注册这些 read/control routes；不会修改 OpenClaw 仓库的 dashboard
+路由。两者都读取同一 execution artifact contract 时，字段语义必须保持兼容。
 
 ### 14.3 Capability 响应
 
@@ -1050,8 +1068,8 @@ Backend 必须确认 preview 未过期、Spec/runtime identity 未漂移，并�
 
 ### 16.2 Contract
 
-直接对当前 `benchmarking.workflow.cli.parse_args()` 或 subprocess `--help` 验证所有文档化 flag
-仍存在：
+从配置的 OpenClaw workspace 中通过 subprocess `--help`（或 OpenClaw 侧允许的轻量 contract helper）
+验证所有文档化 flag 仍存在；Orchestrator 不直接 import `benchmarking.workflow.cli.parse_args()`：
 
 ```text
 --groups
@@ -1075,8 +1093,9 @@ Backend 必须确认 preview 未过期、Spec/runtime identity 未漂移，并�
 ```
 
 同时用分类目录内的真实 fixture Run 验证 artifact 路径和 schema v3 状态轴。历史 schema v2 fixture
-验证现有 dashboard compatibility，不在 control package 写第二套 fixture decoder。VGB capability
-fixture 必须匹配当前 `release.json` 的 `0.3.0` 和 wheel SHA，不能把版本常量复制到 control 代码。
+验证 ArtifactReader compatibility，不在 Orchestrator 写第二套 fixture decoder。OpenClaw 仓库可提供
+契约 fixture/export helper；VGB capability fixture 必须匹配当前 `release.json` 的 `0.3.0` 和 wheel
+SHA，不能把版本常量复制到 control 代码。
 
 ### 16.3 Integration（无模型调用）
 
@@ -1084,11 +1103,11 @@ fixture 必须匹配当前 `release.json` 的 `0.3.0` 和 wheel SHA，不能把�
 2. `--print-selected-records` 精确选择已知 RDKit task；
 3. preview unknown/duplicate record ID 返回结构化错误；
 4. output helper 为 VGB 生成 `formal/<benchmark>/<model>/<run-id>`；
-5. dashboard 从分类 root 递归发现 Run，并在 Run 内停止继续扫描；
+5. ArtifactReader 从分类 root 递归发现 Run，并在 Run 内停止继续扫描；
 6. fake canonical CLI 进程写 progress/per-record，Supervisor 正确对账；
 7. fake CLI 响应 SIGTERM，验证先 signal PID 后升级 process group；
 8. Backend 重启后 PID 消失/存活/fingerprint mismatch 三种恢复；
-9. existing dashboard routes/annotations 回归通过。
+9. Orchestrator read/control routes 回归通过；OpenClaw dashboard 作为独立兼容性 smoke 保持可用。
 
 这里的 fake 位于完整 canonical CLI 边界，不模拟 `openclaw agent` JSON；OpenClaw wrapper 已有自己的
 contract tests。
@@ -1142,10 +1161,10 @@ contract tests。
 ### Milestone 4：API 与 GUI
 
 - FastAPI control routes；
-- 现有 Run snapshot 合并 control 字段；
+- Orchestrator Run snapshot 合并 control 字段；
 - static GUI 创建、预览、取消和 Resume；
 - polling/log paging；
-- existing dashboard regression/E2E。
+- Orchestrator API/GUI regression/E2E，及 OpenClaw artifact contract smoke。
 
 ### Milestone 5：Hardening
 

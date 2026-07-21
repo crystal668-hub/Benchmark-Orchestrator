@@ -9,30 +9,32 @@
 本文定义 Benchmark Orchestrator 的模块关系、Adapter 边界、Launcher 分层、GUI 通信、Run
 状态机和 Benchmark Package 接口。
 
-首版不是新建一个 benchmark engine，而是在现有 `~/.openclaw/workspace/benchmarking` 上增加薄
-控制面。以下能力已经存在，并明确不在 Orchestrator 内重写：
+首版不是新建一个 benchmark engine，而是建立一个独立的 Benchmark Orchestrator 控制面仓库，
+通过受控子进程调用现有 OpenClaw workspace 中的 benchmark runtime。以下能力已经存在于外部
+OpenClaw 仓库，并明确不在 Orchestrator 内重写：
 
 - OpenClaw agent 调用和 JSON/transcript 结果收集；
 - session、retry attempt 和 workspace 隔离；
 - workspace audit/archive/quarantine；
 - VGB release pin、dataset sync 和独立 scorer；
 - record 选择、timeout/retry 和评分；
-- per-record checkpoint、progress、aggregate 和 dashboard read model。
+- per-record checkpoint、progress、aggregate 和 runtime artifact read model（OpenClaw dashboard 也消费该契约）。
 
 ## 2. 架构决策摘要
 
 | 主题 | 决策 | 理由 |
 | --- | --- | --- |
-| 系统形态 | 现有 runtime 上的本地薄控制面 | 最大化复用已验证实现 |
+| 系统形态 | 独立仓库中的本地薄控制面 | 集中管理 Orchestrator，并保持执行面复用 |
+| 交付物 | `benchmark-orchestrator` source/wheel + external runtime compatibility manifest | 不把完整控制面混入 OpenClaw |
 | Harness | 仅 OpenClaw | 当前只有一个已实现且在范围内的 harness |
 | 执行入口 | canonical CLI 子进程 | 保留全部现有隔离、retry、评分和产物语义 |
 | OpenClaw 调用 | 由现有 runner/wrapper 内部完成 | 避免两套命令和 JSON contract |
 | VGB 调用 | 由现有 isolated runtime 完成 | Orchestrator 不接触 package 私有数据或 scorer 环境 |
-| GUI | 扩展现有 FastAPI + static JS/CSS dashboard | 不复制 read model，不引入 React 重写成本 |
-| GUI 通信 | 同源 REST + 短轮询 | 当前 API 已存在；MVP 无 token stream 需求 |
+| GUI | Orchestrator 自有 FastAPI + static JS/CSS | 控制面不再修改或嵌入 OpenClaw 仓库 |
+| GUI 通信 | 同源 REST + 短轮询 | 与本地独立服务边界匹配；MVP 无 token stream 需求 |
 | 运行真相 | per-record/progress/results 文件 | 与 canonical CLI checkpoint 一致 |
-| 控制持久化 | 小型 JSON/YAML sidecar | 只保存进程和用户意图，不复制 task state |
-| Run 目录 | canonical 分类层级内的 exact output | 启动前即可冻结路径，同时兼容当前 dashboard 递归发现 |
+| 控制持久化 | Orchestrator 独立 control root 中的小型 JSON/YAML sidecar | 不污染 OpenClaw workspace |
+| Run 目录 | canonical 分类层级内的 exact output | 启动前即可冻结路径，同时兼容 ArtifactReader/OpenClaw dashboard 递归发现 |
 | Resume | 同目录 + `--merge-existing-per-record` | 直接复用现有缺失项续跑能力 |
 | Cancel | 先 SIGTERM CLI，再超时升级 | 让现有 cleanroom signal hook 完成回收 |
 | Run 并发 | 全局最多一个 active Run | 首版控制本机 provider、CPU/xTB 和清理资源竞争 |
@@ -42,8 +44,8 @@
 
 ```mermaid
 flowchart LR
-    U["Local User"] --> GUI["Existing Benchmark Dashboard GUI"]
-    GUI -->|"HTTP REST + polling"| API["FastAPI Dashboard + Control API"]
+    U["Local User"] --> GUI["Orchestrator GUI"]
+    GUI -->|"HTTP REST + polling"| API["Orchestrator FastAPI"]
     API --> RS["Run Service / Supervisor"]
     RS -->|"argv, cwd, env"| CLI["benchmarking.workflow.cli subprocess"]
     CLI --> SR["Existing SingleLLMRunner"]
@@ -51,17 +53,18 @@ flowchart LR
     OW -->|"openclaw agent --local"| OC["OpenClaw CLI/runtime"]
     CLI --> VS["Existing isolated VGB scorer"]
     VS --> VGB["verifier-grounded-benchmark 0.3.0"]
-    CLI --> ART["Run artifacts / progress"]
+    CLI --> ART["OpenClaw run artifacts / progress"]
     API -->|"read/reconcile"| ART
     RS --> CTRL["Control sidecars"]
+    OD["OpenClaw dashboard (optional)"] -->|"read-only"| ART
 ```
 
 信任与所有权边界：
 
-- Browser 只访问 loopback FastAPI，不接收 OpenClaw credential；
+- Browser 只访问 Orchestrator loopback FastAPI，不接收 OpenClaw credential；
 - Control API 只启动 canonical CLI，不直接调用 OpenClaw；
 - canonical CLI 独占 benchmark artifacts 的写入权；
-- Orchestrator 只写独立 control root，不修改 per-record 或 results；
+- Orchestrator 只写自己的 control root，不修改 OpenClaw runtime 的 per-record 或 results；
 - VGB scorer runtime 与 agent runtime 隔离；
 - workspace runtime guard/transcript audit 是污染防护，不是 OS sandbox。
 
@@ -69,14 +72,14 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph UI["Existing dashboard"]
+    subgraph UI["Standalone Orchestrator"]
         Static["Static HTML / JS / CSS"]
     end
 
-    subgraph Backend["FastAPI process"]
-        ReadAPI["Existing read and annotation routes"]
-        ControlAPI["New control routes"]
-        Dashboard["BenchmarkDashboard read model"]
+    subgraph Backend["Orchestrator FastAPI process"]
+        ReadAPI["Artifact read routes"]
+        ControlAPI["Control routes"]
+        Dashboard["Read-only ArtifactReader"]
         RunService["RunService"]
         Supervisor["LocalRunSupervisor"]
         Registry["FileControlRegistry"]
@@ -84,7 +87,7 @@ flowchart TB
         ProcessDriver["AsyncioProcessDriver"]
     end
 
-    subgraph Runtime["Existing benchmark execution plane"]
+    subgraph Runtime["External OpenClaw benchmark runtime"]
         CanonicalCLI["benchmarking.workflow.cli"]
         Runner["SingleLLMRunner"]
         Workspace["AttemptWorkspaceManager"]
@@ -125,49 +128,50 @@ flowchart TB
 
 | 组件 | 既有职责 |
 | --- | --- |
-| `benchmarking.workflow.cli` | selector、配置、groups、waves、aggregate、manifest |
+| 外部 `benchmarking.workflow.cli` | selector、配置、groups、waves、aggregate、manifest |
 | `SingleLLMRunner` | attempt、timeout retry、answer contract、错误分类 |
 | OpenClaw wrapper | `openclaw agent --local`、stdout/transcript recovery、rescue |
 | `AttemptWorkspaceManager` | prepare、lease、audit、archive/quarantine、fail closed |
 | VGB runtime | release 校验、isolated Python、公共 API 评分 |
 | `ProgressWriter` | `events.jsonl` 和 `state.json` |
-| `BenchmarkDashboard` | 扫描 Run、读取 record/artifact、progress reconciliation |
+| Orchestrator `ArtifactReader` | 扫描外部 Run、读取 record/artifact、progress reconciliation |
 
 ## 5. 模块依赖规则
 
-建议在现有 OpenClaw workspace 内增量实现，保持 dashboard 与 runtime 在同一个受版本控制的 Python
-环境中：
+完整 Orchestrator 实现在独立仓库中；OpenClaw 仓库只允许放置与执行面契约相关的轻量脚手架（例如
+canonical CLI 的 capability/export helper、artifact contract fixture 或兼容性测试），不得放入
+Control API、Supervisor、GUI、control registry 等完整控制面。两个仓库通过 CLI、文件 artifact
+contract 和版本化 runtime manifest 连接。
 
 ```text
-benchmarking.dashboard.app
-  -> benchmarking.control.api
-    -> benchmarking.control.service
-      -> benchmarking.control.runtime_adapter
-      -> benchmarking.control.supervisor
-      -> benchmarking.control.registry
-        -> Python stdlib / shared path helpers
+benchmark_orchestrator.app
+  -> benchmark_orchestrator.api
+    -> benchmark_orchestrator.service
+      -> benchmark_orchestrator.runtime_adapter
+      -> benchmark_orchestrator.supervisor
+      -> benchmark_orchestrator.registry
+      -> benchmark_orchestrator.artifacts
+        -> Python stdlib / Pydantic
 
-benchmarking.dashboard.service
-  -> existing run artifact readers
-
-benchmarking.workflow.cli
-  -> existing runners/runtime/scoring/dashboard.progress
+benchmark_orchestrator.runtime_adapter
+  -> external OpenClaw workspace
+    -> uv run --project <workspace> python -m benchmarking.workflow.cli
+      -> existing runners/runtime/scoring/dashboard.progress
 ```
 
 依赖约束：
 
-1. `benchmarking.control` 可以依赖 canonical CLI 的稳定常量或运行它，但不得 import runner 私有
-   函数来执行任务；
-2. `control` 不 import `openclaw`、VGB package、`SingleLLMRunner` 或 workspace manager；
-3. `dashboard.service` 保持 read-only，不通过读取 API 修改 execution artifact；
-4. `workflow.cli` 不依赖 control API/registry，CLI 仍可独立运行；
-5. static GUI 只使用 HTTP API，不读取本机文件路径；
-6. control registry 与 annotation SQLite 相互独立；annotation 数据不是执行状态；
-7. 不通过 `PYTHONPATH` 把独立 Benchmark-Orchestrator checkout 注入 agent/scorer 子进程。
+1. `benchmark_orchestrator` 只能调用 canonical CLI，不得 import OpenClaw runner 私有函数来执行任务；
+2. Orchestrator 不 import `openclaw`、VGB package、`SingleLLMRunner` 或 workspace manager；
+3. `ArtifactReader` 只实现版本化 artifact read contract，不拥有 execution artifact 写权限；
+4. OpenClaw `workflow.cli` 不依赖 Orchestrator API/registry，CLI 仍可独立运行；
+5. static GUI 只使用 Orchestrator HTTP API，不读取浏览器本机文件路径；
+6. Orchestrator control registry 与 OpenClaw dashboard annotation 数据相互独立；
+7. 不通过 `PYTHONPATH` 把任一仓库 checkout 注入另一个仓库的 agent/scorer 子进程；
+8. OpenClaw 仓库中的脚手架只能提供契约导出、fixture 或兼容性测试，不能反向承载完整 Orchestrator。
 
-`/Users/xutao/Benchmark-Orchestrator` 当前作为设计文档工作区。MVP 实现应与现有
-`benchmarking` package 同仓演进；若以后拆仓，应先把执行面发布为版本化 package 或稳定 RPC，
-不能依赖未版本化绝对路径 import。
+`/Users/xutao/Benchmark-Orchestrator` 是独立项目仓库，拥有自己的 `pyproject.toml`、Python 包、
+GUI、API、测试和发布流程。OpenClaw workspace 作为外部 runtime 安装/工作目录，由配置显式指定。
 
 ## 6. Adapter 接口定义
 
@@ -223,24 +227,29 @@ class BenchmarkRuntimeAdapter(Protocol):
 唯一实现 `CanonicalCliRuntimeAdapter` 必须满足：
 
 - `cwd` 固定为配置的 OpenClaw workspace root；
-- argv 固定以 `uv run python -m benchmarking.workflow.cli` 开始；
+- argv 固定以 `uv run --project <workspace-root> python -m benchmarking.workflow.cli` 开始；
 - preview 只追加 `--print-selected-records`；
 - run 固定传 `--exact-output-dir`，其值由 canonical 分类路径规则生成，而不是旧的扁平目录；
 - resume 在 run argv 上追加 `--merge-existing-per-record`；
 - 参数从结构化 Run Spec 白名单生成，不接受 raw args；
-- 不设置 agent/scorer 的 `PYTHONPATH` 或 `VIRTUAL_ENV`；
+- Orchestrator 自己的 Python 环境与 OpenClaw runtime 环境分离；不设置 agent/scorer 的 `PYTHONPATH`
+  或 `VIRTUAL_ENV`；
 - argv 日志对 prompt、credential 和敏感路径做最小化记录。
 
 ### 6.3 ArtifactReader
 
-不新建另一套 reader protocol。Control API 直接复用 `BenchmarkDashboard` 的现有查询能力：
+由于 Orchestrator 与 OpenClaw 是不同仓库，Control API 不 import `BenchmarkDashboard`。Orchestrator
+提供一个只读 `ArtifactReader`，严格按 OpenClaw runtime manifest、progress 和 schema v3 artifact
+contract 读取文件；它不写 execution root，也不复制 runner/scorer 逻辑。OpenClaw 仓库可以提供
+contract fixture 或导出 helper，供该 reader 的兼容性测试使用。
 
 ```text
 list_runs -> get_run -> list_records -> get_record -> resolve_asset
 ```
 
-需要控制状态时，RunService 将 dashboard snapshot 与 control sidecar 在 API response 层组合；不得把
-control 字段写回 `results.json`。
+需要控制状态时，RunService 将 ArtifactReader snapshot 与 control sidecar 在 API response 层组合；
+不得把 control 字段写回 `results.json`。现有 OpenClaw dashboard 仍可独立读取同一 execution root，
+但不再是 Orchestrator 的运行时依赖。
 
 ## 7. Launcher Backend 分层
 
@@ -307,7 +316,7 @@ class RunSupervisor(Protocol):
 
 | 方案 | MVP 决策 | 说明 |
 | --- | --- | --- |
-| HTTP REST + polling | 采用 | 现有 FastAPI/dashboard 已使用；状态频率低、易恢复 |
+| HTTP REST + polling | 采用 | Orchestrator 自有 FastAPI；状态频率低、易恢复 |
 | WebSocket | 延期 | 当前没有 token delta；progress 已持久化，推送收益有限 |
 | IPC | 不采用 | 浏览器不能直接使用通用本机 IPC，且会形成第二套协议 |
 
@@ -542,10 +551,10 @@ state/benchmark-runs/<formal|temporary>/<benchmark>/<model>/<run-id>/
 └── analysis/status.json
 ```
 
-Control root 独立存放：
+OpenClaw execution root 由外部 runtime 拥有；Orchestrator control root 独立存放：
 
 ```text
-state/benchmark-orchestrator/runs/<run-id>/
+~/.benchmark-orchestrator/state/runs/<run-id>/
 ├── spec.yaml
 ├── preview.json
 ├── control.json
@@ -558,7 +567,8 @@ state/benchmark-orchestrator/runs/<run-id>/
 - per-record 是 record checkpoint；
 - `results.json` 和 `runtime-manifest.json` 可在 Resume 聚合时重建，不能视为 append-only；
 - `progress/events.jsonl` 用于诊断事件历史，`progress/state.json` 是可重建 snapshot；
-- dashboard 从 `state/benchmark-runs` 递归发现分类 Run，并按唯一 `run-id` 查询；
+- ArtifactReader 和现有 OpenClaw dashboard 都从配置的 `state/benchmark-runs` 递归发现分类 Run，并按唯一
+  `run-id` 查询；
 - control sidecar 丢失不会改变已完成 benchmark 结果，但会失去 UI 启动/取消历史；
 - 不在 annotation SQLite 中存 PID 或 task state。
 
