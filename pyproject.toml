@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "benchmark-orchestrator"
+version = "0.1.0"
+description = "Local control plane for the OpenClaw benchmark runtime"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.135.3",
+  "pydantic>=2.12,<3",
+  "PyYAML==6.0.3",
+  "uvicorn==0.44.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1.2,<2",
+]
+
+[project.scripts]
+benchmark-orchestrator = "benchmark_orchestrator.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/benchmark_orchestrator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

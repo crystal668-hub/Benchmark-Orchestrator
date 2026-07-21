@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+import argparse
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import AsyncIterator
+
+import uvicorn
+
+from .annotations import AnnotationStore
+from .api import create_api
+from .artifacts import ArtifactReader
+from .config import OrchestratorConfig, load_config
+from .registry import FileControlRegistry
+from .runtime_adapter import CanonicalCliRuntimeAdapter
+from .service import RunService
+from .supervisor import LocalRunSupervisor
+
+
+def build_service(config: OrchestratorConfig) -> RunService:
+    registry = FileControlRegistry(config.control_root)
+    artifacts = ArtifactReader(config.run_root)
+    adapter = CanonicalCliRuntimeAdapter(config)
+    supervisor = LocalRunSupervisor(config.launcher, registry, artifacts)
+    annotations = AnnotationStore(config.control_root / "annotations.sqlite")
+    return RunService(adapter, supervisor, registry, artifacts, annotations)
+
+
+def build_app(config: OrchestratorConfig):
+    service = build_service(config)
+    static_dir = Path(__file__).with_name("static")
+    app = create_api(
+        service,
+        static_dir=static_dir,
+        configured_host=config.http.host,
+        configured_port=config.http.port,
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app) -> AsyncIterator[None]:
+        service.registry.acquire_backend_lock()
+        await service.supervisor.reconcile_all()
+        try:
+            yield
+        finally:
+            service.registry.release_backend_lock()
+
+    app.router.lifespan_context = lifespan
+    app.state.service = service
+    app.state.config = config
+    return app
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Benchmark Orchestrator local control plane"
+    )
+    parser.add_argument(
+        "--config",
+        default="~/.benchmark-orchestrator/orchestrator.yaml",
+        help="Path to orchestrator YAML configuration",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    config = load_config(args.config)
+    uvicorn.run(
+        build_app(config),
+        host=config.http.host,
+        port=config.http.port,
+        log_level="info",
+    )
+
+
+if __name__ == "__main__":
+    main()

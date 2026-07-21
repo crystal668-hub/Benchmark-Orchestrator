@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "orchestrator_version": "0.1.0",
+  "runtime": {
+    "harness": "openclaw",
+    "verified_cli_version": "2026.6.9",
+    "verified_runtime_revision": "167980c896c7189a1fe1f5df110e3896c3e6ad23",
+    "canonical_cli_contract": "benchmarking.workflow.cli.flags-v1",
+    "artifact_schema_versions": [2, 3]
+  },
+  "vgb_release": {
+    "package": "verifier-grounded-benchmark",
+    "version": "0.3.0",
+    "wheel_sha256": "b93c18b818e8d19993e817de6439ccea910b36a8f386c551078b7c6b10420381",
+    "scoring_profile": "linear_goal_v2",
+    "package_result_schema": 2
+  }
+}

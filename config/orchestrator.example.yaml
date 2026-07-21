@@ -1,0 +1,16 @@
+schema_version: 1
+workspace_root: /Users/xutao/.openclaw/workspace
+run_root: /Users/xutao/.openclaw/workspace/state/benchmark-runs
+control_root: /Users/xutao/.benchmark-orchestrator/state
+
+http:
+  host: 127.0.0.1
+  port: 8875
+  poll_interval_ms: 1000
+
+launcher:
+  max_active_runs: 1
+  cancel_grace_seconds: 15
+  kill_after_seconds: 10
+  max_log_bytes: 52428800
+

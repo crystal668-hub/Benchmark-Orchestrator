@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Benchmark Orchestrator</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" id="homeButton" type="button" aria-label="新建运行">
+      <span class="brand-mark" aria-hidden="true"><b>BO</b><i>01</i></span>
+      <span><strong>Benchmark Orchestrator</strong><small>OpenClaw / VGB control plane</small></span>
+    </button>
+    <div class="runtime-line">
+      <span class="runtime-signal" id="runtimeSignal"></span>
+      <span id="runtimeLabel">正在检查 Runtime</span>
+      <span class="runtime-revision" id="runtimeRevision"></span>
+    </div>
+    <button class="icon-button mobile-runs-button" id="mobileRunsButton" type="button" title="运行记录" aria-label="运行记录">
+      <i data-lucide="list"></i>
+    </button>
+    <button class="icon-button" id="refreshButton" type="button" title="刷新" aria-label="刷新">
+      <i data-lucide="refresh-cw"></i>
+    </button>
+  </header>
+  <button class="rail-scrim" id="railScrim" type="button" aria-label="关闭运行记录"></button>
+
+  <div class="shell">
+    <aside class="run-rail">
+      <div class="rail-heading">
+        <div><span class="eyebrow">RUN INDEX</span><strong>运行记录</strong></div>
+        <button class="icon-button dark" id="newRunButton" type="button" title="新建 Run" aria-label="新建 Run">
+          <i data-lucide="plus"></i>
+        </button>
+      </div>
+      <div class="run-list" id="runList"></div>
+      <div class="empty-rail" id="emptyRail">暂无受控 Run</div>
+    </aside>
+
+    <main>
+      <section id="createView" class="view create-view">
+        <div class="view-title">
+          <div>
+            <span class="eyebrow">NEW EXPERIMENT</span>
+            <h1>创建 Benchmark Run</h1>
+          </div>
+          <span class="schema-tag">SPEC / V1</span>
+        </div>
+
+        <form id="runForm">
+          <div class="form-band identity-band">
+            <label>运行名称<input name="name" type="text" maxlength="120" placeholder="rdkit-skills-comparison"></label>
+            <label>模型<input name="model" type="text" maxlength="200" value="qwen3.5-plus" required></label>
+            <label>Thinking
+              <select name="thinking">
+                <option>off</option><option>minimal</option><option>low</option><option>medium</option><option selected>high</option><option>xhigh</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <fieldset class="form-section dataset-section">
+              <legend><span>01</span> 数据集</legend>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_rdkit" checked><span class="swatch rdkit"></span><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span><b id="count-rdkit">11</b></label>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_xtb_xyz"><span class="swatch xtb"></span><span><strong>xTB / XYZ</strong><small>verifier_grounded_xtb_xyz</small></span><b id="count-xtb">18</b></label>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_property_calculation"><span class="swatch property"></span><span><strong>Property</strong><small>property_calculation</small></span><b id="count-property_calculation">2</b></label>
+            </fieldset>
+
+            <fieldset class="form-section group-section">
+              <legend><span>02</span> 实验组</legend>
+              <div class="segment-stack">
+                <label><input type="checkbox" name="groups" value="single_llm_skills_on" checked><span><i data-lucide="badge-check"></i>Skills On</span></label>
+                <label><input type="checkbox" name="groups" value="single_llm_skills_off" checked><span><i data-lucide="circle-off"></i>Skills Off</span></label>
+              </div>
+              <label class="compact-label">组并发
+                <select name="max_concurrent_groups"><option value="1">1 / 串行</option><option value="2">2 / 并行</option></select>
+              </label>
+              <label class="switch-line"><span>运行分析</span><input type="checkbox" name="analysis"><i></i></label>
+            </fieldset>
+
+            <fieldset class="form-section selection-section">
+              <legend><span>03</span> Record 选择</legend>
+              <label>Record IDs<textarea name="record_ids" rows="4" placeholder="每行或逗号分隔；留空选择全部"></textarea></label>
+              <div class="inline-fields">
+                <label>Offset<input name="offset" type="number" min="0" value="0"></label>
+                <label>Limit<input name="limit" type="number" min="1" placeholder="全部"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="form-section execution-section">
+              <legend><span>04</span> 执行策略</legend>
+              <div class="inline-fields three">
+                <label>Timeout / 秒<input name="timeout_seconds" type="number" min="1" value="900"></label>
+                <label>Retries<input name="timeout_retries" type="number" min="0" max="10" value="3"></label>
+                <label>Wave delay<input name="inter_wave_delay_seconds" type="number" min="0" max="3600" value="0"></label>
+              </div>
+              <label>Retry backoff<input name="backoff" type="text" value="5, 15, 45"></label>
+              <label class="switch-line"><span>无任务超时</span><input type="checkbox" name="no_timeout" id="noTimeout"><i></i></label>
+            </fieldset>
+          </div>
+
+          <div class="command-bar">
+            <div class="command-status"><span id="formStatus">等待预览</span><small id="specDigest"></small></div>
+            <button class="primary-button" id="previewButton" type="submit"><i data-lucide="scan-search"></i>预览选择</button>
+          </div>
+        </form>
+
+        <section class="preview-band" id="previewBand" hidden>
+          <div class="preview-summary">
+            <div><span class="eyebrow">FROZEN SELECTION</span><h2>执行预览</h2></div>
+            <div class="metric"><strong id="previewRecords">0</strong><span>Records</span></div>
+            <div class="metric"><strong id="previewGroups">0</strong><span>Groups</span></div>
+            <div class="metric accent"><strong id="previewExecutions">0</strong><span>Executions</span></div>
+            <button class="run-button" id="startButton" type="button"><i data-lucide="play"></i>启动 Run</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Record ID</th><th>Dataset</th><th>Subset</th><th>Eval</th></tr></thead><tbody id="previewRows"></tbody></table></div>
+        </section>
+      </section>
+
+      <section id="runView" class="view run-view" hidden>
+        <div class="run-header">
+          <div>
+            <button class="back-link" id="backButton" type="button"><i data-lucide="arrow-left"></i>Run index</button>
+            <span class="eyebrow" id="runCategory">CONTROLLED RUN</span>
+            <h1 id="runTitle">Run</h1>
+            <code id="runPath"></code>
+          </div>
+          <div class="run-actions">
+            <span class="state-badge" id="runState">created</span>
+            <button class="secondary-button danger" id="cancelButton" type="button" hidden><i data-lucide="square"></i>取消</button>
+            <button class="primary-button" id="resumeButton" type="button" hidden><i data-lucide="rotate-ccw"></i>续跑缺失项</button>
+          </div>
+        </div>
+
+        <div class="progress-band">
+          <div class="progress-copy"><strong id="progressFraction">0 / 0</strong><span>已提交执行</span></div>
+          <div class="progress-track"><i id="progressFill"></i></div>
+          <div class="progress-percent" id="progressPercent">0%</div>
+        </div>
+
+        <div class="run-metrics">
+          <div><span>PID</span><strong id="metricPid">—</strong></div>
+          <div><span>Invocation</span><strong id="metricInvocation">—</strong></div>
+          <div><span>Missing</span><strong id="metricMissing">—</strong></div>
+          <div><span>Exit code</span><strong id="metricExit">—</strong></div>
+        </div>
+
+        <div class="result-layout">
+          <section class="results-section">
+            <div class="section-heading"><div><span class="eyebrow">CHECKPOINT MATRIX</span><h2>逐题结果</h2></div><span id="recordCountLabel"></span></div>
+            <div class="table-wrap"><table class="result-table"><thead><tr><th>Group</th><th>Record</th><th>Checkpoint</th><th>Verifier</th><th>Lifecycle</th><th>Answer</th></tr></thead><tbody id="recordRows"></tbody></table></div>
+          </section>
+          <aside class="evidence-panel" id="evidencePanel">
+            <div class="section-heading"><div><span class="eyebrow">RUNTIME EVIDENCE</span><h2>执行证据</h2></div></div>
+            <dl id="evidenceList"><dt>状态</dt><dd>选择一条已提交结果</dd></dl>
+            <pre id="launcherLog">Launcher log 尚不可用</pre>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
