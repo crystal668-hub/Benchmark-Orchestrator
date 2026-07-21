@@ -1,0 +1,442 @@
+# Benchmark Orchestrator 需求说明与初步架构（MVP）
+
+- 状态：`REVISED`
+- 修订日期：2026-07-21
+- MVP Harness：仅 OpenClaw
+- Benchmark：`verifier-grounded-benchmark==0.3.0`
+
+## 1. 文档目的
+
+本文定义 Benchmark Orchestrator 首版的产品范围和系统边界。设计以本机已经实现的
+OpenClaw benchmark scaffold 为基础，不重新实现 agent 调用、workspace/session 隔离、VGB
+评分、per-record checkpoint 或结果看板。
+
+代码和已实施规格是运行行为的权威来源：
+
+- `~/.openclaw/workspace/benchmarking/`
+- `~/.openclaw/workspace/GLOBAL_DEV_SPEC.md`
+- `~/.openclaw/workspace/benchmarking/resources/verifier_grounded/release.json`
+- `~/.openclaw/workspace/docs/superpowers/specs/2026-07-15-verifier-grounded-openclaw-single-llm-integration-usage-spec.md`
+- `~/.openclaw/workspace/docs/superpowers/specs/2026-07-16-benchmark-attempt-workspace-behavior-and-adjudication-spec.md`
+- `~/.openclaw/workspace/docs/superpowers/specs/2026-07-16-benchmark-forbidden-path-root-containment-spec.md`
+
+本文、`Architecture_Design.md` 和 `Technical_Design.md` 若与上述实现发生冲突，应先按代码验证，
+再同步修正文档，不能在 Orchestrator 内增加兼容分支掩盖差异。
+
+## 2. 已有能力基线
+
+### 2.1 唯一执行入口
+
+所有新 Run 必须通过现有 canonical CLI 启动：
+
+```bash
+cd ~/.openclaw/workspace
+uv run python -m benchmarking.workflow.cli [options]
+```
+
+Orchestrator 不直接执行 `openclaw agent`，也不直接 import VGB 进行评分。canonical CLI 已经负责：
+
+1. 选择数据集、record 和实验组；
+2. 创建 run-scoped OpenClaw config；
+3. 为每个 primary/retry attempt 创建独立 session 和 workspace；
+4. 调用 OpenClaw、解析 JSON、恢复 transcript answer 并校验 answer contract；
+5. 审计、归档或隔离 attempt workspace；
+6. 在独立 scorer runtime 中调用 VGB 公共 API；
+7. 持久化 per-record、聚合结果、进度、manifest 和分析状态。
+
+### 2.2 OpenClaw 实际调用方式
+
+canonical CLI 内部由 `SingleLLMRunner` 调用 wrapper，wrapper 最终执行：
+
+```text
+openclaw agent --local --agent <agent-id> --session-id <session-id>
+  --message <prompt> --thinking <level> --timeout <seconds> --json
+```
+
+本次复核的本机版本为 `OpenClaw 2026.6.9 (c645ec4)`。版本号是环境证据，不替代源码和
+contract test。
+
+MVP 的事实约束如下：
+
+- 使用 `--local`，这是显式 embedded/local 执行，不是 Gateway 失败后的 fallback；
+- 使用唯一 `session-id`，不使用 `session-key`；
+- 使用 run-scoped config 和 attempt-scoped workspace，不复用用户日常 agent workspace；
+- stdout、transcript recovery、time reminder、finalization rescue 和错误分类均由现有 wrapper/runner
+  处理；
+- Orchestrator 不解释 OpenClaw 返回 JSON，也不管理单个 OpenClaw session。
+
+### 2.3 VGB 接入基线
+
+固定 release：
+
+| 字段 | 值 |
+| --- | --- |
+| package | `verifier-grounded-benchmark` |
+| version / source tag | `0.3.0` / `v0.3.0` |
+| source commit | `89ed5b9d83547bea98f6eeac4a03a131e33e8b90` |
+| wheel | `verifier_grounded_benchmark-0.3.0-py3-none-any.whl`，`143722` bytes |
+| wheel SHA256 | `b93c18b818e8d19993e817de6439ccea910b36a8f386c551078b7c6b10420381` |
+| scoring / package result schema | `linear_goal_v2` / `2` |
+| release config | `benchmarking/resources/verifier_grounded/release.json` |
+
+可用 track：
+
+| VGB track | CLI dataset | 题数 | scorer timeout |
+| --- | --- | ---: | ---: |
+| `rdkit` | `verifier_grounded_rdkit` | 11 | 180 秒 |
+| `xtb` | `verifier_grounded_xtb_xyz` | 18 | 1800 秒 |
+| `property_calculation` | `verifier_grounded_property_calculation` | 2 | 180 秒 |
+
+0.3.0 保留三个正式 track 的 task ID 和数量，但把正式 scoring profile 升级为
+`linear_goal_v2`。不同 VGB release/scoring identity 的连续分数不能在未标注版本的情况下直接混合
+比较。VGB package result schema `2` 与 OpenClaw per-record/results schema `3` 是两层不同契约，
+不得混淆。
+
+易变的 release version/hash 只以当前 `release.json`、verified wheel 和 isolated runtime manifest 为
+准；dated integration spec 负责接口与隔离规则，不作为 release 身份的最终来源。
+
+现有 scorer 使用 hash-addressed 独立 virtualenv、`python -I`，不继承 agent 的 `PYTHONPATH` 或
+`VIRTUAL_ENV`。允许的 package 接口只有：
+
+```python
+load_track(track).prompts()
+load_track(track).evaluate_one({"task_id": task_id, "response": response})
+load_track("property_calculation").sample_answers()
+```
+
+### 2.4 已有 Resume 和结果看板
+
+Resume 使用相同输出目录重新调用 canonical CLI，并增加：
+
+```text
+--exact-output-dir <original-output-dir>
+--merge-existing-per-record
+```
+
+已有 `per-record/<group>/<record>.json` 的 record 会被跳过，剩余 record 重新执行，最后从全部
+per-record 文件重建聚合结果。此契约是“补齐缺失结果”，不是 Python 指令级、token 级或
+OpenClaw session 级恢复。
+
+重要限制：任何已经存在的 per-record 文件，包括内容为失败结果的文件，都会被视为已提交并跳过。
+首版 Resume 不自动重跑已落盘失败项；重跑失败项应创建新 Run。以后若需要原地选择性重跑，必须
+先在 runtime 中形成显式、可审计的替换协议，不能由 GUI 删除文件模拟。
+
+已有 dashboard 是 FastAPI + 静态 JavaScript/CSS，命令为：
+
+```bash
+uv run --extra web-ui python -m benchmarking.dashboard.app
+```
+
+默认监听 `127.0.0.1:8765`，已经提供 Run、record、progress、artifact 和 annotation 查询。
+dashboard 会递归发现
+`state/benchmark-runs/<formal|temporary>/<benchmark>/<model>/<run-id>`，并在识别到 Run 后停止向其
+内部 archive/recovery 目录继续扫描。MVP 在其上增加控制能力，不引入第二套 React 前端。
+
+## 3. 产品定位
+
+Benchmark Orchestrator 是现有 benchmark runtime 上的本地控制面，负责把可验证的 CLI 参数变成
+易用的创建、启动、观察、取消和 Resume 工作流。
+
+```text
+用户 / GUI
+  -> Orchestrator Control API
+    -> canonical benchmark CLI 子进程
+      -> existing OpenClaw runner and isolation
+      -> isolated VGB scorer
+    -> existing run artifacts and dashboard read model
+```
+
+执行面与控制面的边界：
+
+| 控制面负责 | 已有执行面负责 |
+| --- | --- |
+| Run Spec 校验和参数映射 | record 选择的最终校验 |
+| CLI 进程启动、观察、取消 | OpenClaw agent/session/workspace 生命周期 |
+| 控制状态和 invocation 历史 | timeout retry、answer recovery、workspace audit |
+| GUI 命令和运行列表 | VGB prompt、评分和结果映射 |
+| 读取 progress/results/artifacts | per-record checkpoint 和聚合报告 |
+
+## 4. MVP 范围
+
+### 4.1 目标
+
+1. 在 GUI 中发现并选择三个 VGB dataset；
+2. 仅支持 `single_llm_skills_on` 和 `single_llm_skills_off`；
+3. 配置 record 范围、model、thinking、timeout、retry、并发组和分析开关；
+4. 在真实启动前预览最终 record 选择；
+5. 启动并监督 canonical CLI，展示实时进度和逐题结果；
+6. 支持优雅 Cancel，并保留已提交的 per-record 结果；
+7. 对中断、取消或非零退出 Run 执行“补齐缺失结果”式 Resume；
+8. 复用现有 dashboard 查看结果、artifact 和 annotation；
+9. 不削弱现有 session/workspace/scorer 隔离和 fail-closed 语义。
+10. MVP 全局最多运行一个 active Run；单个 Run 内仍可按配置并发 skills-on/off groups。
+
+### 4.2 非目标
+
+- Hermes 或其他 agent harness；
+- 通用 Harness Adapter entry point/plugin loader；
+- 直接调用或解析 `openclaw agent`；
+- OpenClaw Gateway WebSocket/RPC backend；
+- Gateway-required 模式或 embedded fallback 判定；
+- VGB 私有 API、私有 verifier 数据或本地重写 scorer；
+- 新建 SQLite task/attempt 状态库；
+- 用 React 重写现有 dashboard；
+- token delta、模型思维链或完整 tool trace 的实时转发；
+- 分布式 worker、多主 Backend 或跨机器 Run；
+- 原地重跑已有失败 per-record；
+- 将 runtime guard/transcript audit 描述为 OS sandbox。
+
+## 5. 用户流程
+
+### 5.1 创建并运行
+
+1. GUI 从 Backend 读取 dataset、group、thinking 等 capability；
+2. 用户填写 Run Spec；
+3. Backend 规范化字段并计算稳定 `run_id`、输出目录和参数摘要；
+4. Backend 使用同一组 selector 参数执行 `--print-selected-records`；
+5. GUI 展示最终 record 列表和数量，用户确认后启动；
+6. Backend 创建控制 sidecar，以新进程组启动 canonical CLI；
+7. GUI 轮询控制状态及现有 `/api/runs/{run_id}/progress`；
+8. per-record 文件出现后，现有 dashboard 立即将其作为权威结果展示；
+9. CLI 正常退出且 `progress/state.json`/`results.json` 完整时，Run 标记为 completed。
+
+### 5.2 Cancel
+
+1. 用户对 running Run 发出 Cancel；
+2. Backend 将控制状态改为 `cancelling`，先向 CLI 主进程发送 `SIGTERM`；
+3. canonical CLI 的 SIGTERM/atexit cleanup 执行 cleanroom 回收；
+4. 超过宽限期后，Backend 才清理仍存活的进程组；
+5. Backend 记录退出码、signal 和取消时间；
+6. 已原子落盘的 per-record 文件保留，当前未提交 record 在 Resume 时重新执行。
+
+Backend 不逐个查找或终止 OpenClaw session，也不删除 workspace/archive/quarantine。
+
+### 5.3 Resume
+
+1. 用户选择 `cancelled`、`interrupted` 或 `failed` Run；
+2. Backend 读取首次启动时冻结的 normalized Run Spec；
+3. Backend 校验输出目录属于允许的 run root，且没有存活 invocation；
+4. Backend 用原 selector、group、model 和执行参数重建 argv；
+5. 使用原 `--exact-output-dir` 并追加 `--merge-existing-per-record`；
+6. canonical CLI 为缺失 record 创建全新的 invocation、session 和 attempt workspace；
+7. 聚合结果从已有和新生成的 per-record 文件共同重建。
+
+Resume 不允许在原 Run 中修改 dataset、record selection、group、model、thinking 或 timeout policy。
+用户要比较新配置时应创建新 Run。
+
+## 6. 功能需求
+
+### FR-01 Capability 与 Preflight
+
+- Backend 必须验证 workspace root、`uv`、Python module 和 `openclaw` 可用；
+- dataset 列表来自 canonical CLI `--list-datasets` 或 release config，不维护手写副本作为运行真相；
+- record 预览必须调用 canonical CLI `--print-selected-records`，且不得触发模型调用；
+- 启动前必须显式限制 group 为 skills-on/off；
+- 不执行 Gateway health check。
+
+### FR-02 Run Spec
+
+- Run Spec 必须有 schema version；
+- 必须显式提供一个或两个 MVP group 和至少一个 VGB dataset；
+- 必须保存 normalized YAML、参数摘要和实际 argv 的脱敏版本；
+- `run_id` 和输出目录必须防路径穿越、冲突和覆盖；
+- Backend 只允许映射白名单字段，禁止把任意 CLI 字符串从浏览器透传到 shell。
+
+### FR-03 启动与监督
+
+- canonical CLI 必须使用 argv 数组启动，不经过 shell；
+- 每个 Run 同时最多一个活跃 invocation；
+- Backend 必须记录 PID、process group、启动时间、退出时间、退出码和取消请求；
+- Backend 重启后必须根据进程存活和 artifact 状态对账，不能把旧 `running` sidecar 永久保留；
+- launcher stdout/stderr 写入独立控制日志，但不得用日志文本推断 task 完成。
+
+### FR-04 Progress 与结果
+
+- progress 权威来源为 `progress/state.json` 和现有 dashboard reconciliation；
+- record 结果权威来源为 `per-record/<group>/<record>.json`；
+- 最终聚合来源为 `results.json`；
+- GUI 必须展示每组 total/completed/current record、Run 控制状态和执行错误；
+- GUI 必须保留现有结果轴，不把“有 answer”“可评分”“已评分”和“协议完成”压成一个 pass/fail。
+
+### FR-05 Cancel
+
+- Cancel API 必须幂等；
+- 只允许取消当前由本 Backend 监督且仍存活的 invocation；
+- 先向 CLI 主进程发送优雅终止，再按配置的宽限期升级；
+- Cancel 期间 GUI 必须显示 `cancelling`；
+- Cancel 不删除任何运行产物。
+
+### FR-06 Resume
+
+- Resume 只允许补齐缺失 per-record；
+- 必须复用冻结 Run Spec 和相同输出目录；
+- 必须添加 `--merge-existing-per-record`；
+- 必须拒绝对 completed Run、活跃 Run 或 Spec 不可恢复 Run 执行 Resume；
+- 每次 Resume invocation 都必须独立记录；
+- 已存在 per-record 失败结果不得被静默覆盖。
+
+### FR-07 Dashboard 与通信
+
+- 复用现有 FastAPI 应用和静态前端；
+- 新增控制端点后仍保持现有 read/annotation API 兼容；
+- MVP 使用同源 HTTP REST；GUI 以短轮询读取 progress 和 Run snapshot；
+- 首版不要求 WebSocket 或 IPC；
+- Backend 默认只监听 loopback。
+
+### FR-08 Artifact 访问
+
+- 复用现有受控 asset endpoint；
+- 任何 asset path 必须 resolve 后仍位于对应 Run root；
+- 禁止通过 API 读取 runtime config secret、OpenClaw credential、agent session store 或 scorer venv；
+- archive/quarantine 的展示必须沿用 dashboard 的允许列表和路径 containment。
+
+### FR-09 审计与可复现性
+
+- 控制 sidecar 记录 Run Spec digest、argv digest、workspace root 和 invocation 历史；
+- CLI 生成的 `runtime-manifest.json`、skill health、workspace policy 和 evaluator versions 原样保留；
+- 用户修改 alias、favorite、annotation 不得改变执行 artifacts；
+- 日志不得记录 prompt 全文、环境变量值或 credential。
+
+## 7. 状态语义
+
+### 7.1 控制面 Run 状态
+
+| 状态 | 含义 |
+| --- | --- |
+| `created` | Spec 已冻结，尚未启动 |
+| `starting` | CLI 正在创建，尚未确认存活 |
+| `running` | CLI invocation 存活 |
+| `cancelling` | 已请求终止，等待 cleanup/退出 |
+| `completed` | CLI 正常退出且最终 artifacts 可读 |
+| `failed` | CLI 非零退出或最终 artifact 无效 |
+| `cancelled` | 用户取消导致 invocation 退出 |
+| `interrupted` | Backend 重启后发现旧 invocation 不存活且未完成 |
+
+控制状态只描述 canonical CLI 进程，不替代执行面 progress 或 record 状态。
+
+### 7.2 Record 结果轴
+
+GUI 和 API 必须保留现有 schema v3 定义的独立字段：
+
+- `run_lifecycle_status`
+- `protocol_completion_status`
+- `protocol_acceptance_status`
+- `answer_availability`
+- `answer_reliability`
+- `evaluable`
+- `scored`
+- `recovery_mode`
+- `degraded_execution`
+- `execution_error_kind`
+
+VGB 使用连续分数：`primary_metric="verifier_score"`，`passed=None`。Orchestrator 不增加本地通过
+阈值，也不把 `score > 0` 映射成 pass。
+
+### 7.3 真相优先级
+
+发生不一致时按以下规则处理：
+
+1. 单题结果以完整、可解析的 per-record 文件为准；
+2. 进度以 progress snapshot 并结合 per-record reconciliation 为准；
+3. 最终聚合以 `results.json` 为准；
+4. CLI 是否仍运行以 OS 进程身份校验为准；
+5. 控制 sidecar 只记录控制历史，不覆盖以上执行事实；
+6. launcher log 只用于诊断，不作为状态数据库。
+
+## 8. Workspace 与安全边界
+
+现有 runtime 已实现：
+
+- primary/retry 使用唯一 session ID；
+- attempt 从 canonical template 创建新 workspace；
+- `.git` 排除和 sentinel/lease 校验；
+- scratch contract v2：`scratch/{requests,outputs,notes,tmp}`；
+- transcript/tool path containment audit；
+- workspace archive/quarantine；
+- contamination、audit unavailable、archive failure 时 fail closed；
+- SIGINT/SIGTERM/atexit cleanroom cleanup。
+
+Orchestrator 必须通过 canonical CLI 继承这些能力，不得自行创建 agent workspace、OpenClaw config
+或 session。当前安全边界是 runtime guard 加 transcript audit，不是针对同一 OS 用户的强隔离；
+需要强对抗隔离时应另立容器/sandbox 项目。
+
+## 9. 非功能需求
+
+### NFR-01 可靠性
+
+- 控制 sidecar 和 normalized spec 使用临时文件加原子 rename；
+- Backend 崩溃不损坏已有 per-record artifacts；
+- API 重试不能启动重复 invocation；
+- Resume 不覆盖已提交 per-record。
+
+### NFR-02 可观察性
+
+- 首屏可在一个轮询周期内看到状态变化；
+- 展示 control state、progress state、PID/exit code 和最后错误来源；
+- 保留 launcher stdout/stderr，但限制大小并轮转；
+- 不承诺 token streaming。
+
+### NFR-03 安全
+
+- 默认 `127.0.0.1`，不提供无认证的公网监听；
+- API 输入使用结构化 schema 和字段白名单；
+- 子进程不经 shell；
+- 所有可配置路径进行 root containment；
+- 浏览器不接收 OpenClaw credential 或完整 runtime config。
+
+### NFR-04 兼容性
+
+- Python 和依赖版本服从 OpenClaw workspace 的现有 `pyproject.toml`/`uv.lock`；
+- 不依赖未发布的 OpenClaw Gateway SDK；
+- 遇到 canonical CLI 参数或 artifact schema 变化时，contract test 必须先失败并要求显式适配；
+- 历史 schema v2 结果继续由现有 dashboard/runtime compatibility 代码读取，Orchestrator 不另写
+  upconverter。
+
+## 10. MVP 验收标准
+
+1. GUI 只能创建 OpenClaw skills-on/off + VGB 三个 dataset 的 Run；
+2. record preview 与同参数真实 Run 的选择一致，且 preview 不调用 agent；
+3. Backend 启动的 argv 以 `python -m benchmarking.workflow.cli` 为入口；
+4. Backend 代码中不存在直接 `openclaw agent` 命令或 OpenClaw JSON decoder；
+5. 一题 smoke Run 生成 per-record、progress、results 和 runtime manifest；
+6. Cancel 首先触发 CLI 的 SIGTERM cleanup，且不删除已完成 per-record；
+7. Cancel 后 Resume 使用相同输出目录和 `--merge-existing-per-record`，不会再次运行已有 record；
+8. 已落盘失败 record 不会被 Resume 静默重跑；
+9. GUI 能展示连续 verifier score 和全部 record 状态轴；
+10. dashboard 现有 read、asset 和 annotation API 回归测试通过；
+11. 路径穿越、任意参数注入和重复启动被拒绝；
+12. 文档中的 CLI 参数均存在于当前 `parse_args()`，artifact 名称与真实 Run 一致。
+13. 新 Run 位于 `formal/<benchmark>/<model>/<run-id>` 分类层级，dashboard 可从根目录递归发现。
+14. Capability 展示的 VGB version/wheel hash 与当前 `release.json` 完全一致。
+
+## 11. 后续演进触发条件
+
+只有出现第二个真实 Harness，且它不能通过现有 canonical runtime 接入时，才设计通用 Harness
+Adapter/plugin contract。只有出现远程 worker 或多实例写入需求，才引入数据库任务队列和 lease。
+只有 HTTP 轮询经测量成为性能或交互瓶颈，才增加 WebSocket/SSE。
+
+后续可能的独立项目包括：
+
+- 选择性重跑已提交失败 record 的 runtime 原生协议；
+- OS sandbox/container 强隔离；
+- 远程 worker 和集中 artifact store；
+- 第二种 Harness 接入；
+- 可选的事件推送通道。
+
+这些能力不得提前进入 MVP 接口或数据模型。
+
+## 12. 已确定的架构决策
+
+1. OpenClaw 是 MVP 唯一 Harness；
+2. canonical benchmark CLI 是唯一写执行 artifacts 的入口；
+3. Orchestrator 是薄控制面，不是第二个 benchmark engine；
+4. 复用现有 FastAPI dashboard 和静态前端；
+5. GUI 与 Backend 使用 loopback HTTP REST + 短轮询；
+6. 进度和 record 状态以现有文件 artifacts 为真相；
+7. 不建立 SQLite Run/Task/Attempt 状态副本；
+8. Resume 复用 `--exact-output-dir` + `--merge-existing-per-record`，只补齐缺失项；
+9. Cancel 终止 canonical CLI，由现有 cleanroom 契约负责底层回收；
+10. VGB 继续使用固定 release、隔离 scorer 和公共 API；
+11. 不直接连接 Gateway，不使用 session key，不复用用户 workspace；
+12. 通用 Harness plugin、Gateway backend、React 重写和分布式执行均延期。
+13. MVP 全局串行执行 Run；后续仅在资源容量和隔离验证通过后评估多 Run 并发。
