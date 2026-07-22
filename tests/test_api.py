@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import shutil
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 
 from benchmark_orchestrator.app import build_app
 from benchmark_orchestrator.config import OrchestratorConfig
 from tests.fake_runtime import result, write_json
+from tests.helpers import seed_controlled_run
 
 
 def test_health_static_and_structured_validation(config: OrchestratorConfig) -> None:
@@ -81,3 +85,48 @@ def test_historical_run_without_control_sidecar_exposes_tasks(
     assert tasks.json()[0]["checkpoint"] == "committed"
     assert tasks.json()[0]["result"]["evaluation"]["passed"] is None
     assert snapshot.json()["control"] is None
+
+
+def test_deleted_completed_run_is_removed_from_run_list(
+    config: OrchestratorConfig,
+) -> None:
+    run = config.run_root / "formal/verifier-grounded-rdkit/model/completed-run"
+    payload = result("single_llm_skills_on", "rdkit_qed_max_001")
+    write_json(run / "per-record/single_llm_skills_on/record.json", payload)
+    app = build_app(config)
+    frozen = seed_controlled_run(
+        app.state.service.registry, run, run_id="completed-run"
+    )
+    control = app.state.service.registry.load_control(frozen.run_id).model_copy(
+        update={"state": "completed"}
+    )
+    app.state.service.registry.save_control(control)
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        assert [item["run_id"] for item in client.get("/api/runs").json()] == [
+            "completed-run"
+        ]
+        shutil.rmtree(run)
+        assert client.get("/api/runs").json() == []
+
+
+def test_active_run_without_artifacts_remains_in_run_list(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    frozen = seed_controlled_run(
+        app.state.service.registry,
+        config.run_root / "formal/verifier-grounded-rdkit/model/active-run",
+        run_id="active-run",
+    )
+    control = app.state.service.registry.load_control(frozen.run_id).model_copy(
+        update={"state": "running"}
+    )
+    app.state.service.supervisor.reconcile = AsyncMock(return_value=control)
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    assert response.json()[0]["run_id"] == "active-run"
+    assert response.json()[0]["control"]["state"] == "running"
