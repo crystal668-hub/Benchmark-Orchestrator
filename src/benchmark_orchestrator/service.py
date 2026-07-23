@@ -44,7 +44,22 @@ class RunService:
     async def capabilities(self) -> dict[str, Any]:
         return await self.adapter.inspect_capabilities()
 
+    async def _ensure_runtime_ready(self) -> None:
+        capabilities = await self.adapter.inspect_capabilities()
+        if capabilities["ready"]:
+            return
+        failed_checks = [
+            item for item in capabilities["checks"] if not item["ok"]
+        ]
+        raise OrchestratorError(
+            "runtime_unavailable",
+            "Runtime preflight failed",
+            status_code=503,
+            details={"failed_checks": failed_checks},
+        )
+
     async def preview(self, spec: RunSpec) -> PreviewSnapshot:
+        await self._ensure_runtime_ready()
         records = await self.adapter.execute_preview(spec)
         revision, dirty = await self.adapter.runtime_revision()
         release = self.adapter.release_identity()
@@ -118,6 +133,7 @@ class RunService:
             if existing:
                 frozen, control = existing
                 return self._command_response(frozen, control)
+            await self._ensure_runtime_ready()
             preview = self._preview_for_create(request)
             await self._identity_matches_preview(preview)
             await self._ensure_no_active_run()

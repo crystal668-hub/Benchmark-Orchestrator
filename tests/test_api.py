@@ -24,6 +24,63 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
+    assert 'id="previewButton" type="submit" disabled' in index.text
+    assert 'id="startButton" type="button" disabled' in index.text
+
+
+def test_preview_rejects_failed_runtime_preflight(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    app.state.service.adapter.inspect_capabilities = AsyncMock(
+        return_value={
+            "ready": False,
+            "checks": [{"name": "openclaw", "ok": False, "message": "not found"}],
+        }
+    )
+    app.state.service.adapter.execute_preview = AsyncMock()
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.post(
+            "/api/runs/preview",
+            json={
+                "groups": ["single_llm_skills_on"],
+                "datasets": ["verifier_grounded_rdkit"],
+                "agent": {"model": "openai/gpt-5.5", "thinking": "high"},
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "runtime_unavailable"
+    assert response.json()["error"]["details"]["failed_checks"] == [
+        {"name": "openclaw", "ok": False, "message": "not found"}
+    ]
+    app.state.service.adapter.execute_preview.assert_not_awaited()
+
+
+def test_create_rejects_failed_runtime_preflight(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    app.state.service.adapter.inspect_capabilities = AsyncMock(
+        return_value={
+            "ready": False,
+            "checks": [{"name": "openclaw", "ok": False, "message": "not found"}],
+        }
+    )
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.post(
+            "/api/runs",
+            json={
+                "preview_id": "preview",
+                "spec_sha256": "a" * 64,
+                "request_id": "request-create",
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "runtime_unavailable"
 
 
 def test_cross_origin_mutation_is_rejected(config: OrchestratorConfig) -> None:

@@ -114,7 +114,7 @@
 
           <div class="command-bar">
             <div class="command-status"><span id="formStatus">等待预览</span><small id="specDigest"></small></div>
-            <button class="primary-button" id="previewButton" type="submit"><i data-lucide="scan-search"></i>预览选择</button>
+            <button class="primary-button" id="previewButton" type="submit" disabled><i data-lucide="scan-search"></i>预览选择</button>
           </div>
         </form>
 
@@ -124,7 +124,7 @@
             <div class="metric"><strong id="previewRecords">0</strong><span>Records</span></div>
             <div class="metric"><strong id="previewGroups">0</strong><span>Groups</span></div>
             <div class="metric accent"><strong id="previewExecutions">0</strong><span>Executions</span></div>
-            <button class="run-button" id="startButton" type="button"><i data-lucide="play"></i>启动 Run</button>
+            <button class="run-button" id="startButton" type="button" disabled><i data-lucide="play"></i>启动 Run</button>
           </div>
           <div class="table-wrap"><table><thead><tr><th>Record ID</th><th>Dataset</th><th>Subset</th><th>Eval</th></tr></thead><tbody id="previewRows"></tbody></table></div>
         </section>

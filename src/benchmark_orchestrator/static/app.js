@@ -38,6 +38,12 @@ function renderModels(models, defaultModel) {
   updateRunName();
 }
 
+function updateRuntimeControls() {
+  const ready = Boolean(state.capabilities?.ready);
+  $("#previewButton").disabled = !ready;
+  $("#startButton").disabled = !ready || !state.preview;
+}
+
 async function loadCapabilities() {
   try {
     const payload = await api("/api/capabilities");
@@ -46,12 +52,15 @@ async function loadCapabilities() {
     $("#runtimeSignal").className = `runtime-signal ${payload.ready ? "ready" : "failed"}`;
     $("#runtimeLabel").textContent = payload.ready ? `Runtime ready · VGB ${payload.vgb_release.version}` : "Runtime preflight failed";
     $("#runtimeRevision").textContent = payload.runtime_revision ? payload.runtime_revision.slice(0, 10) + (payload.runtime_dirty ? " · dirty" : "") : "revision unknown";
+    updateRuntimeControls();
     for (const dataset of payload.datasets) {
       const suffix = dataset.id.replace("verifier_grounded_", "");
       const count = document.getElementById(`count-${suffix}`);
       if (count) count.textContent = dataset.task_count;
     }
   } catch (error) {
+    state.capabilities = null;
+    updateRuntimeControls();
     $("#runtimeSignal").className = "runtime-signal failed";
     $("#runtimeLabel").textContent = "Runtime unavailable";
     toast(error.message, true);
@@ -119,13 +128,14 @@ async function previewRun(event) {
     $("#previewExecutions").textContent = state.preview.execution_count;
     $("#previewRows").innerHTML = state.preview.records.map((record) => `<tr><td><code>${escapeHtml(record.record_id)}</code></td><td>${escapeHtml(record.dataset)}</td><td>${escapeHtml(record.subset)}</td><td>${escapeHtml(record.eval_kind)}</td></tr>`).join("");
     $("#previewBand").hidden = false;
+    updateRuntimeControls();
     $("#previewBand").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     state.preview = null;
     $("#previewBand").hidden = true;
     $("#formStatus").textContent = "预览失败";
     toast(error.message, true);
-  } finally { button.disabled = false; }
+  } finally { updateRuntimeControls(); }
 }
 
 async function startRun() {
@@ -138,7 +148,7 @@ async function startRun() {
     await loadRuns();
     await openRun(created.run_id);
   } catch (error) { toast(error.message, true); }
-  finally { button.disabled = false; }
+  finally { updateRuntimeControls(); }
 }
 
 function showCreate() {
