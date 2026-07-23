@@ -24,8 +24,9 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert 'id="previewButton" type="submit" disabled' in index.text
-    assert 'id="startButton" type="button" disabled' in index.text
+    assert '<script defer src="/app.js?v=2"></script>' in index.text
+    assert 'id="previewButton" type="submit"' in index.text
+    assert 'id="startButton" type="button"' in index.text
 
 
 def test_preview_rejects_failed_runtime_preflight(

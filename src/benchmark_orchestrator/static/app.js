@@ -269,6 +269,7 @@ function initialize() {
   $("#modelSelect").addEventListener("change", updateRunName);
   document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", updateRunName));
   window.addEventListener("load", () => { if (window.lucide) window.lucide.createIcons(); });
+  updateRuntimeControls();
   Promise.all([loadCapabilities(), loadRuns()]);
 }
 
