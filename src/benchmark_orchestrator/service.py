@@ -294,7 +294,8 @@ class RunService:
         for run_id in controlled_ids:
             frozen = self.registry.load_frozen(run_id)
             control = await self.supervisor.reconcile(run_id)
-            if run_id not in artifact_runs and control.state not in ACTIVE_STATES:
+            has_artifacts = run_id in artifact_runs
+            if not has_artifacts and control.state not in ACTIVE_STATES:
                 continue
             entry = artifact_runs.setdefault(
                 run_id,
@@ -314,6 +315,10 @@ class RunService:
                     "summary": {},
                 },
             )
+            if has_artifacts:
+                entry["progress"] = self.artifacts.progress(
+                    run_id, expected_pairs=frozen.selected_pairs
+                )
             entry["control"] = {
                 "state": control.state,
                 "active_invocation_id": control.active_invocation_id,
