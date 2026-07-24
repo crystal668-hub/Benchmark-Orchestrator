@@ -250,7 +250,20 @@ function initialize() {
   $("#homeButton").addEventListener("click", showCreate);
   $("#newRunButton").addEventListener("click", showCreate);
   $("#backButton").addEventListener("click", showCreate);
-  $("#refreshButton").addEventListener("click", async () => { await Promise.all([loadCapabilities(), loadRuns()]); if (state.activeRunId) await refreshRun(); });
+  $("#refreshButton").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.classList.add("is-refreshing");
+    button.setAttribute("aria-busy", "true");
+    try {
+      await Promise.all([loadCapabilities(), loadRuns()]);
+      if (state.activeRunId) await refreshRun();
+    } finally {
+      button.disabled = false;
+      button.classList.remove("is-refreshing");
+      button.removeAttribute("aria-busy");
+    }
+  });
   $("#mobileRunsButton").addEventListener("click", () => document.body.classList.toggle("rail-open"));
   $("#railScrim").addEventListener("click", () => document.body.classList.remove("rail-open"));
   $("#cancelButton").addEventListener("click", () => command("cancel"));
