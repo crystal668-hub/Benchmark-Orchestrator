@@ -33,7 +33,7 @@ class ProcessHandle:
 def process_fingerprint(
     pid: int, started_at: str, executable: str, argv_sha256: str
 ) -> str:
-    payload = f"{pid}\0{started_at}\0{executable}\0{argv_sha256}".encode("utf-8")
+    payload = f"{pid}\0{started_at}\0{executable}\0{argv_sha256}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 

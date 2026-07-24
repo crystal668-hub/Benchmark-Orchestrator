@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .models import OrchestratorError
-
 
 STATUS_AXES = (
     "run_lifecycle_status",

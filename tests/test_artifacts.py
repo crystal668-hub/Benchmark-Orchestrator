@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark_orchestrator.artifacts import ArtifactReader, STATUS_AXES
+from benchmark_orchestrator.artifacts import STATUS_AXES, ArtifactReader
 from benchmark_orchestrator.models import OrchestratorError
 from tests.fake_runtime import result, write_json
 

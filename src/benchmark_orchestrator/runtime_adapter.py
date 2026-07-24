@@ -6,8 +6,9 @@ import json
 import os
 import re
 import shutil
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from .config import OrchestratorConfig
 from .models import (
@@ -17,7 +18,6 @@ from .models import (
     RuntimeCommand,
     SelectedRecord,
 )
-
 
 CLI_PREFIX = ("uv", "run", "--project")
 MVP_GROUPS = ("single_llm_skills_on", "single_llm_skills_off")

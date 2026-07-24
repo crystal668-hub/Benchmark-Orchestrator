@@ -6,7 +6,6 @@ import signal
 import time
 from pathlib import Path
 
-
 cancelled = False
 
 

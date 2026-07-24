@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 GroupId = Literal["single_llm_skills_on", "single_llm_skills_off"]
 DatasetId = Literal[
     "verifier_grounded_rdkit",
@@ -99,7 +98,7 @@ class ExecutionSpec(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def validate_backoff_length(self) -> "ExecutionSpec":
+    def validate_backoff_length(self) -> ExecutionSpec:
         if len(self.timeout_retry_backoff_seconds) < self.timeout_retries:
             raise ValueError(
                 "retry backoff must include at least timeout_retries values"

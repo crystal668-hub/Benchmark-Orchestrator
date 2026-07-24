@@ -14,7 +14,6 @@ from benchmark_orchestrator.supervisor import LocalRunSupervisor
 from tests.fake_runtime import result, write_json
 from tests.helpers import seed_controlled_run
 
-
 FAKE_RUNTIME = Path(__file__).with_name("fake_runtime.py")
 
 
