@@ -189,3 +189,37 @@ def test_active_run_without_artifacts_remains_in_run_list(
     assert response.status_code == 200
     assert response.json()[0]["run_id"] == "active-run"
     assert response.json()[0]["control"]["state"] == "running"
+
+
+def test_active_run_list_uses_frozen_selection_for_progress_total(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    run = config.run_root / "formal/verifier-grounded-rdkit/model/active-run"
+    records = tuple(f"rdkit_qed_max_{index:03d}" for index in range(1, 11))
+    frozen = seed_controlled_run(
+        app.state.service.registry,
+        run,
+        run_id="active-run",
+        records=records,
+    )
+    for record_id in records[:2]:
+        write_json(
+            run / "per-record/single_llm_skills_on" / f"{record_id}.json",
+            result("single_llm_skills_on", record_id),
+        )
+    write_json(
+        run / "progress/state.json",
+        {"status": "running", "total": 10, "completed": 2, "groups": {}},
+    )
+    control = app.state.service.registry.load_control(frozen.run_id).model_copy(
+        update={"state": "running"}
+    )
+    app.state.service.supervisor.reconcile = AsyncMock(return_value=control)
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    assert response.json()[0]["progress"]["completed"] == 2
+    assert response.json()[0]["progress"]["total"] == 10
