@@ -27,6 +27,7 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert '<script defer src="/app.js?v=2"></script>' in index.text
     assert 'id="previewButton" type="submit"' in index.text
     assert 'id="startButton" type="button"' in index.text
+    assert 'id="count-xtb_xyz">20</b>' in index.text
 
 
 def test_preview_rejects_failed_runtime_preflight(
