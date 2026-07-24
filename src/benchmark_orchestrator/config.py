@@ -48,7 +48,7 @@ class OrchestratorConfig(StrictModel):
         return Path(value).expanduser().resolve()
 
     @model_validator(mode="after")
-    def validate_roots(self) -> "OrchestratorConfig":
+    def validate_roots(self) -> OrchestratorConfig:
         if self.run_root == self.control_root:
             raise ValueError("run_root and control_root must differ")
         if self.run_root.is_relative_to(
