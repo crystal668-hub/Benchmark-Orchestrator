@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=4">
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script defer src="/app.js?v=2"></script>
+  <script defer src="/app.js?v=4"></script>
 </head>
 <body>
   <header class="topbar">
@@ -35,8 +35,8 @@
   </header>
   <button class="rail-scrim" id="railScrim" type="button" aria-label="关闭运行记录"></button>
 
-  <div class="shell">
-    <aside class="run-rail">
+  <div class="shell" id="workspaceShell">
+    <aside class="run-rail" id="runRail">
       <div class="rail-heading">
         <div><span class="eyebrow">RUN INDEX</span><strong>运行记录</strong></div>
         <button class="icon-button dark" id="newRunButton" type="button" title="新建 Run" aria-label="新建 Run">
@@ -47,7 +47,9 @@
       <div class="empty-rail" id="emptyRail">暂无受控 Run</div>
     </aside>
 
-    <main>
+    <div class="resize-handle resize-handle--vertical resize-handle--rail" data-resize="rail" role="separator" tabindex="0" aria-label="调整运行记录栏宽度" aria-orientation="vertical" aria-controls="runRail workspaceMain"></div>
+
+    <main id="workspaceMain">
       <section id="createView" class="view create-view">
         <div class="view-title">
           <div>
@@ -71,7 +73,7 @@
             </label>
           </div>
 
-          <div class="form-grid">
+          <div class="form-grid" id="formGrid">
             <fieldset class="form-section dataset-section">
               <legend><span>01</span> 数据集</legend>
               <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_rdkit" checked><span class="swatch rdkit"></span><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span><b id="count-rdkit">11</b></label>
@@ -110,6 +112,8 @@
               <label>Retry backoff<input name="backoff" type="text" value="5, 15, 45"></label>
               <label class="switch-line"><span>无任务超时</span><input type="checkbox" name="no_timeout" id="noTimeout"><i></i></label>
             </fieldset>
+            <div class="resize-handle resize-handle--vertical resize-handle--form-column" data-resize="form-column" role="separator" tabindex="0" aria-label="调整配置列宽度" aria-orientation="vertical" aria-controls="formGrid"></div>
+            <div class="resize-handle resize-handle--horizontal resize-handle--form-row" data-resize="form-row" role="separator" tabindex="0" aria-label="调整配置行高度" aria-orientation="horizontal" aria-controls="formGrid"></div>
           </div>
 
           <div class="command-bar">
@@ -158,11 +162,12 @@
           <div><span>Exit code</span><strong id="metricExit">—</strong></div>
         </div>
 
-        <div class="result-layout">
-          <section class="results-section">
+        <div class="result-layout" id="resultLayout">
+          <section class="results-section" id="resultsSection">
             <div class="section-heading"><div><span class="eyebrow">CHECKPOINT MATRIX</span><h2>逐题结果</h2></div><span id="recordCountLabel"></span></div>
             <div class="table-wrap"><table class="result-table"><thead><tr><th>Group</th><th>Record</th><th>Checkpoint</th><th>Verifier</th><th>Lifecycle</th><th>Answer</th></tr></thead><tbody id="recordRows"></tbody></table></div>
           </section>
+          <div class="resize-handle resize-handle--vertical resize-handle--results" data-resize="results" role="separator" tabindex="0" aria-label="调整结果和执行证据区域宽度" aria-orientation="vertical" aria-controls="resultsSection evidencePanel"></div>
           <aside class="evidence-panel" id="evidencePanel">
             <div class="section-heading"><div><span class="eyebrow">RUNTIME EVIDENCE</span><h2>执行证据</h2></div></div>
             <dl id="evidenceList"><dt>状态</dt><dd>选择一条已提交结果</dd></dl>

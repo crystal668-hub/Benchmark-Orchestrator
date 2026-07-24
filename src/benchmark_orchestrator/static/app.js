@@ -21,6 +21,178 @@ function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (cha
 function short(value, length = 12) { const text = String(value || ""); return text.length > length ? text.slice(0, length) : text || "—"; }
 function slug(value) { return String(value || "item").trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "item"; }
 
+const RESIZE_STORAGE_PREFIX = "bo-resize-";
+let refreshResizablePanels = () => {};
+
+function resizeRange(minimum, maximum) {
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || maximum - minimum < 1) return null;
+  return { min: Math.round(minimum), max: Math.round(maximum) };
+}
+
+function clamp(value, minimum, maximum) { return Math.min(Math.max(value, minimum), maximum); }
+
+function initResizablePanels() {
+  const configs = {
+    rail: {
+      axis: "x", property: "--rail-user-width", target: "#workspaceShell",
+      disabled: () => window.matchMedia("(max-width: 760px)").matches,
+      measure: () => $("#runRail").getBoundingClientRect().width,
+      range: () => {
+        const width = $("#workspaceShell").getBoundingClientRect().width;
+        return resizeRange(220, Math.min(440, width - 360));
+      },
+    },
+    "form-column": {
+      axis: "x", property: "--form-left-size", target: "#formGrid",
+      disabled: () => window.matchMedia("(max-width: 760px)").matches,
+      measure: () => $(".dataset-section").getBoundingClientRect().width,
+      range: () => {
+        const width = $("#formGrid").getBoundingClientRect().width;
+        return resizeRange(220, width - 230);
+      },
+    },
+    "form-row": {
+      axis: "y", property: "--form-top-size", target: "#formGrid",
+      disabled: () => window.matchMedia("(max-width: 760px)").matches,
+      measure: () => $(".dataset-section").getBoundingClientRect().height,
+      range: () => {
+        const height = $("#formGrid").getBoundingClientRect().height;
+        return resizeRange(210, height - 220);
+      },
+    },
+    results: {
+      axis: "x", property: "--result-primary-size", target: "#resultLayout",
+      disabled: () => window.matchMedia("(max-width: 1060px)").matches,
+      measure: () => $("#resultsSection").getBoundingClientRect().width,
+      range: () => {
+        const width = $("#resultLayout").getBoundingClientRect().width;
+        return resizeRange(300, width - 290);
+      },
+    },
+  };
+  const handles = [...document.querySelectorAll("[data-resize]")];
+
+  function getRange(config) {
+    if (config.disabled()) return null;
+    return config.range();
+  }
+
+  function readSavedSize(name) {
+    try { return Number(localStorage.getItem(`${RESIZE_STORAGE_PREFIX}${name}`)); }
+    catch (_) { return null; }
+  }
+
+  function persist(name, value) {
+    try { localStorage.setItem(`${RESIZE_STORAGE_PREFIX}${name}`, String(value)); }
+    catch (_) { /* Keep resizing functional when storage is unavailable. */ }
+  }
+
+  function applySize(name, handle, value, range, shouldPersist = true) {
+    const config = configs[name];
+    const next = Math.round(clamp(value, range.min, range.max));
+    const target = $(config.target);
+    target.style.setProperty(config.property, `${next}px`);
+    target.classList.add("has-resized-layout");
+    handle.setAttribute("aria-valuemin", range.min);
+    handle.setAttribute("aria-valuemax", range.max);
+    handle.setAttribute("aria-valuenow", next);
+    handle.setAttribute("aria-valuetext", `${next} px`);
+    if (shouldPersist) persist(name, next);
+  }
+
+  function updateHandle(handle) {
+    const config = configs[handle.dataset.resize];
+    const range = getRange(config);
+    const disabled = !range;
+    handle.setAttribute("aria-disabled", String(disabled));
+    handle.tabIndex = disabled ? -1 : 0;
+    if (!range) return null;
+    const value = Math.round(config.measure());
+    handle.setAttribute("aria-valuemin", range.min);
+    handle.setAttribute("aria-valuemax", range.max);
+    handle.setAttribute("aria-valuenow", clamp(value, range.min, range.max));
+    handle.setAttribute("aria-valuetext", `${clamp(value, range.min, range.max)} px`);
+    return range;
+  }
+
+  function refreshHandles() {
+    handles.forEach((handle) => {
+      const name = handle.dataset.resize;
+      const config = configs[name];
+      const range = updateHandle(handle);
+      if (!range) return;
+      const target = $(config.target);
+      if (!target.style.getPropertyValue(config.property)) {
+        const saved = readSavedSize(name);
+        if (Number.isFinite(saved) && saved > 0) {
+          applySize(name, handle, saved, range, false);
+          return;
+        }
+      }
+      const value = config.measure();
+      if (value < range.min || value > range.max) applySize(name, handle, value, range);
+    });
+  }
+
+  handles.forEach((handle) => {
+    const name = handle.dataset.resize;
+    const config = configs[name];
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const activeRange = updateHandle(handle);
+      if (!activeRange) return;
+      const startValue = config.measure();
+      const startPosition = config.axis === "x" ? event.clientX : event.clientY;
+      const pointerId = event.pointerId;
+      handle.setPointerCapture(pointerId);
+      document.body.classList.add("is-resizing");
+      document.body.dataset.resizeAxis = config.axis;
+      event.preventDefault();
+
+      const move = (moveEvent) => {
+        if (moveEvent.pointerId !== pointerId) return;
+        const position = config.axis === "x" ? moveEvent.clientX : moveEvent.clientY;
+        applySize(name, handle, startValue + position - startPosition, activeRange, false);
+      };
+      const stop = (stopEvent) => {
+        if (stopEvent.pointerId !== pointerId) return;
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", stop);
+        handle.removeEventListener("pointercancel", stop);
+        if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+        document.body.classList.remove("is-resizing");
+        delete document.body.dataset.resizeAxis;
+        persist(name, Math.round(config.measure()));
+        updateHandle(handle);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", stop);
+      handle.addEventListener("pointercancel", stop);
+    });
+
+    handle.addEventListener("keydown", (event) => {
+      const activeRange = updateHandle(handle);
+      if (!activeRange) return;
+      const step = event.shiftKey ? 40 : 16;
+      const decrease = config.axis === "x" ? "ArrowLeft" : "ArrowUp";
+      const increase = config.axis === "x" ? "ArrowRight" : "ArrowDown";
+      let next = null;
+      if (event.key === decrease) next = config.measure() - step;
+      if (event.key === increase) next = config.measure() + step;
+      if (event.key === "Home") next = activeRange.min;
+      if (event.key === "End") next = activeRange.max;
+      if (next === null) return;
+      event.preventDefault();
+      applySize(name, handle, next, activeRange);
+    });
+  });
+
+  refreshResizablePanels = refreshHandles;
+  window.addEventListener("resize", refreshHandles);
+  refreshHandles();
+}
+
 function updateRunName() {
   const datasets = [...document.querySelectorAll("[name=datasets]:checked")].map((input) => input.value);
   const dataset = datasets.length === 1 ? datasets[0] : datasets.length > 1 ? "mixed-datasets" : "dataset";
@@ -166,6 +338,7 @@ async function openRun(runId) {
   $("#createView").hidden = true;
   $("#runView").hidden = false;
   renderRunList();
+  refreshResizablePanels();
   const shouldPoll = await refreshRun();
   clearInterval(state.pollTimer);
   if (shouldPoll) state.pollTimer = setInterval(refreshRun, 1000);
@@ -269,6 +442,7 @@ function initialize() {
   $("#modelSelect").addEventListener("change", updateRunName);
   document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", updateRunName));
   window.addEventListener("load", () => { if (window.lucide) window.lucide.createIcons(); });
+  initResizablePanels();
   updateRuntimeControls();
   Promise.all([loadCapabilities(), loadRuns()]);
 }
