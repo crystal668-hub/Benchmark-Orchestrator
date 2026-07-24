@@ -42,7 +42,7 @@ def _load_json(path: Path) -> Any:
 def _safe_json(path: Path, default: Any) -> Any:
     try:
         return _load_json(path)
-    except Exception:
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return default
 
 
@@ -119,7 +119,7 @@ class ArtifactReader:
         for path in self._result_files(run_dir):
             try:
                 payload = _load_json(path)
-            except Exception:
+            except (OSError, UnicodeError, json.JSONDecodeError):
                 invalid.append(str(path.relative_to(run_dir)))
                 continue
             if not _valid_record(payload):
@@ -152,7 +152,7 @@ class ArtifactReader:
             results = _load_json(run_dir / "results.json")
             progress = _load_json(run_dir / "progress/state.json")
             committed, invalid = self.checkpoint_state(run_id)
-        except Exception:
+        except (OSError, UnicodeError, json.JSONDecodeError, OrchestratorError):
             return False
         return (
             isinstance(results, dict)

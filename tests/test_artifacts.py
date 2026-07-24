@@ -53,6 +53,40 @@ def test_checkpoint_uses_payload_identity_and_flags_corruption(tmp_path: Path) -
     assert invalid == ["per-record/single_llm_skills_on/corrupt.json"]
 
 
+def test_malformed_results_falls_back_without_validating_final_artifacts(
+    tmp_path: Path,
+) -> None:
+    run = demo_run(tmp_path)
+    (run / "results.json").write_text("{broken", encoding="utf-8")
+    reader = ArtifactReader(tmp_path)
+
+    assert reader.load_results(run)[0]["record_id"] == "rdkit_qed_max_001"
+    assert not reader.final_artifacts_valid(
+        "demo-run", [("single_llm_skills_on", "rdkit_qed_max_001")]
+    )
+
+
+def test_artifact_reader_does_not_hide_programming_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = demo_run(tmp_path)
+    reader = ArtifactReader(tmp_path)
+
+    def fail_json_load(_path: Path) -> None:
+        raise RuntimeError("programming defect")
+
+    monkeypatch.setattr("benchmark_orchestrator.artifacts._load_json", fail_json_load)
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        reader.load_results(run)
+    with pytest.raises(RuntimeError, match="programming defect"):
+        reader.checkpoint_state("demo-run")
+    with pytest.raises(RuntimeError, match="programming defect"):
+        reader.final_artifacts_valid(
+            "demo-run", [("single_llm_skills_on", "rdkit_qed_max_001")]
+        )
+
+
 def test_record_api_preserves_continuous_score_and_status_axes(tmp_path: Path) -> None:
     demo_run(tmp_path)
     reader = ArtifactReader(tmp_path)
