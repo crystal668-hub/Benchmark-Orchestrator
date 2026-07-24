@@ -60,15 +60,6 @@ function initResizablePanels() {
         return resizeRange(210, height - 220);
       },
     },
-    results: {
-      axis: "x", property: "--result-primary-size", target: "#resultLayout",
-      disabled: () => window.matchMedia("(max-width: 1060px)").matches,
-      measure: () => $("#resultsSection").getBoundingClientRect().width,
-      range: () => {
-        const width = $("#resultLayout").getBoundingClientRect().width;
-        return resizeRange(300, width - 290);
-      },
-    },
   };
   const handles = [...document.querySelectorAll("[data-resize]")];
 
@@ -381,35 +372,34 @@ function renderRun(run, control, tasks) {
   $("#metricInvocation").textContent = short(invocation?.invocation_id, 10);
   $("#metricMissing").textContent = control?.missing_count ?? "—";
   $("#metricExit").textContent = invocation?.exit_code ?? "—";
-  $("#recordCountLabel").textContent = `${tasks.length} selected pairs`;
-  $("#recordRows").innerHTML = tasks.map((task, index) => {
-    const result = task.result || {};
-    const evaluation = result.evaluation || {};
-    const score = evaluation.normalized_score ?? evaluation.score;
-    return `<tr data-task-index="${index}"><td>${task.group_id.endsWith("_on") ? "Skills On" : "Skills Off"}</td><td><code>${escapeHtml(task.record_id)}</code></td><td><span class="checkpoint ${task.checkpoint}">${task.checkpoint}</span></td><td>${score == null ? "—" : Number(score).toFixed(4)}</td><td>${escapeHtml(result.run_lifecycle_status || "—")}</td><td>${escapeHtml(result.answer_availability || "—")}</td></tr>`;
-  }).join("");
-  $("#recordRows").querySelectorAll("tr").forEach((row) => row.addEventListener("click", () => showEvidence(tasks[Number(row.dataset.taskIndex)], row)));
-  loadLog(control);
+  renderResultMatrix(tasks);
 }
 
-function showEvidence(task, row) {
-  $("#recordRows").querySelectorAll("tr").forEach((item) => item.classList.remove("selected"));
-  row.classList.add("selected");
+function groupLabel(groupId) {
+  if (groupId === "single_llm_skills_on") return "Skills On";
+  if (groupId === "single_llm_skills_off") return "Skills Off";
+  return groupId.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function resultCell(task) {
+  if (!task) return '<td class="result-cell result-cell--empty"><span>未选择</span></td>';
   const result = task.result || {};
   const evaluation = result.evaluation || {};
-  const axes = ["run_lifecycle_status", "protocol_completion_status", "protocol_acceptance_status", "answer_availability", "answer_reliability", "evaluable", "scored", "recovery_mode", "degraded_execution", "execution_error_kind"];
-  const entries = [["Group", task.group_id], ["Record", task.record_id], ["Metric", evaluation.primary_metric], ["Score", evaluation.normalized_score ?? evaluation.score], ...axes.map((axis) => [axis, result[axis]])];
-  $("#evidenceList").innerHTML = entries.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value ?? "—")}</dd>`).join("");
+  const score = evaluation.normalized_score ?? evaluation.score;
+  const formattedScore = score == null || !Number.isFinite(Number(score)) ? "—" : Number(score).toFixed(4);
+  return `<td class="result-cell">
+    <div class="result-cell-top"><span class="checkpoint ${escapeHtml(task.checkpoint)}">${escapeHtml(task.checkpoint)}</span><strong>${formattedScore}</strong></div>
+    <dl><div><dt>Lifecycle</dt><dd>${escapeHtml(result.run_lifecycle_status || "—")}</dd></div><div><dt>Answer</dt><dd>${escapeHtml(result.answer_availability || "—")}</dd></div></dl>
+  </td>`;
 }
 
-async function loadLog(control) {
-  const invocation = control?.invocations?.find((item) => item.invocation_id === control.active_invocation_id) || control?.invocations?.at(-1);
-  if (!invocation) { $("#launcherLog").textContent = "Launcher log 尚不可用"; return; }
-  try {
-    const log = await api(`/api/runs/${encodeURIComponent(state.activeRunId)}/control/log?invocation_id=${encodeURIComponent(invocation.invocation_id)}&offset=0&limit=65536`);
-    $("#launcherLog").textContent = log.data || "Launcher log 暂无输出";
-    $("#launcherLog").scrollTop = $("#launcherLog").scrollHeight;
-  } catch (_) { /* The control poll remains authoritative. */ }
+function renderResultMatrix(tasks) {
+  const groups = [...new Set(tasks.map((task) => task.group_id))];
+  const records = [...new Set(tasks.map((task) => task.record_id))];
+  const taskByPair = new Map(tasks.map((task) => [`${task.group_id}\u0000${task.record_id}`, task]));
+  $("#recordCountLabel").textContent = `${records.length} records · ${groups.length} groups`;
+  $("#recordHead").innerHTML = `<tr><th class="record-column">Record</th>${groups.map((groupId) => `<th class="group-column"><strong>${escapeHtml(groupLabel(groupId))}</strong><code>${escapeHtml(groupId)}</code></th>`).join("")}</tr>`;
+  $("#recordRows").innerHTML = records.map((recordId) => `<tr><th scope="row" class="record-column"><code>${escapeHtml(recordId)}</code></th>${groups.map((groupId) => resultCell(taskByPair.get(`${groupId}\u0000${recordId}`))).join("")}</tr>`).join("");
 }
 
 async function command(kind) {

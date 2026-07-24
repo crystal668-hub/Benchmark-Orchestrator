@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=4">
+  <link rel="stylesheet" href="/styles.css?v=5">
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script defer src="/app.js?v=4"></script>
+  <script defer src="/app.js?v=5"></script>
 </head>
 <body>
   <header class="topbar">
@@ -165,14 +165,8 @@
         <div class="result-layout" id="resultLayout">
           <section class="results-section" id="resultsSection">
             <div class="section-heading"><div><span class="eyebrow">CHECKPOINT MATRIX</span><h2>逐题结果</h2></div><span id="recordCountLabel"></span></div>
-            <div class="table-wrap"><table class="result-table"><thead><tr><th>Group</th><th>Record</th><th>Checkpoint</th><th>Verifier</th><th>Lifecycle</th><th>Answer</th></tr></thead><tbody id="recordRows"></tbody></table></div>
+            <div class="table-wrap result-table-wrap"><table class="result-table"><thead id="recordHead"></thead><tbody id="recordRows"></tbody></table></div>
           </section>
-          <div class="resize-handle resize-handle--vertical resize-handle--results" data-resize="results" role="separator" tabindex="0" aria-label="调整结果和执行证据区域宽度" aria-orientation="vertical" aria-controls="resultsSection evidencePanel"></div>
-          <aside class="evidence-panel" id="evidencePanel">
-            <div class="section-heading"><div><span class="eyebrow">RUNTIME EVIDENCE</span><h2>执行证据</h2></div></div>
-            <dl id="evidenceList"><dt>状态</dt><dd>选择一条已提交结果</dd></dl>
-            <pre id="launcherLog">Launcher log 尚不可用</pre>
-          </aside>
         </div>
       </section>
     </main>
