@@ -25,8 +25,8 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=6">' in index.text
-    assert '<script defer src="/app.js?v=6"></script>' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=7">' in index.text
+    assert '<script defer src="/app.js?v=7"></script>' in index.text
     assert '<thead id="recordHead"></thead>' in index.text
     assert 'id="evidencePanel"' not in index.text
     assert 'id="previewButton" type="submit"' in index.text

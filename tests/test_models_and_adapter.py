@@ -199,7 +199,7 @@ async def test_dataset_record_selection_resolves_each_dataset_before_windowing(
 
     assert [record.record_id for record in records] == ["xtb_gap_window_001"]
     calls = adapter._execute_preview.await_args_list
-    assert calls[0].args[0].selection.record_ids == ["rdkit_qed_max_001"]
+    assert calls[0].args[0].selection.record_ids == []
     assert calls[1].args[0].selection.record_ids == []
 
     frozen = frozen_for(config, spec).model_copy(
@@ -210,6 +210,31 @@ async def test_dataset_record_selection_resolves_each_dataset_before_windowing(
     assert command.argv[record_flag + 1] == "xtb_gap_window_001"
     assert "--offset" not in command.argv
     assert "--limit" not in command.argv
+
+
+def test_dataset_record_selection_accepts_numeric_record_suffixes(
+    config: OrchestratorConfig,
+) -> None:
+    adapter = adapter_for(config)
+    records = [
+        SelectedRecord(
+            record_id="rdkit_logp_target_011",
+            dataset="verifier_grounded_rdkit",
+        ),
+        SelectedRecord(
+            record_id="rdkit_sa_logp_target_012",
+            dataset="verifier_grounded_rdkit",
+        ),
+    ]
+
+    selected = adapter._select_dataset_records(
+        records, ["011", "rdkit_sa_logp_target_012"], "verifier_grounded_rdkit"
+    )
+
+    assert [record.record_id for record in selected] == [
+        "rdkit_logp_target_011",
+        "rdkit_sa_logp_target_012",
+    ]
 
 
 def test_output_path_matches_canonical_classification(

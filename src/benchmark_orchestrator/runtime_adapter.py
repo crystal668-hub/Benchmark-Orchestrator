@@ -323,6 +323,48 @@ class CanonicalCliRuntimeAdapter:
                 status_code=502,
             ) from exc
 
+    @staticmethod
+    def _select_dataset_records(
+        records: Sequence[SelectedRecord], record_ids: Sequence[str], dataset: str
+    ) -> list[SelectedRecord]:
+        if not record_ids:
+            return list(records)
+
+        selected: list[SelectedRecord] = []
+        selected_ids: set[str] = set()
+        for requested_id in record_ids:
+            matches = [
+                record for record in records if record.record_id == requested_id
+            ]
+            if not matches and requested_id.isdecimal():
+                matches = [
+                    record
+                    for record in records
+                    if record.record_id.endswith(f"_{requested_id}")
+                ]
+            if not matches:
+                raise OrchestratorError(
+                    "selection_invalid",
+                    f"Unknown record id {requested_id!r} in {dataset}",
+                    status_code=422,
+                )
+            if len(matches) > 1:
+                raise OrchestratorError(
+                    "selection_invalid",
+                    f"Ambiguous record id {requested_id!r} in {dataset}",
+                    status_code=422,
+                )
+            record = matches[0]
+            if record.record_id in selected_ids:
+                raise OrchestratorError(
+                    "selection_invalid",
+                    f"Record selection contains duplicate id {record.record_id!r}",
+                    status_code=422,
+                )
+            selected_ids.add(record.record_id)
+            selected.append(record)
+        return selected
+
     def output_location(
         self, spec: RunSpec, timestamp: str
     ) -> tuple[str, str, str, Path]:
@@ -381,14 +423,17 @@ class CanonicalCliRuntimeAdapter:
             dataset_spec = spec.model_copy(
                 update={
                     "datasets": [dataset],
-                    "selection": SelectionSpec(
-                        record_ids=spec.selection.record_ids_by_dataset.get(dataset, [])
-                    ),
+                    "selection": SelectionSpec(),
                 }
             )
+            available_records = await self._execute_preview(
+                dataset_spec, timeout_seconds=timeout_seconds
+            )
             records.extend(
-                await self._execute_preview(
-                    dataset_spec, timeout_seconds=timeout_seconds
+                self._select_dataset_records(
+                    available_records,
+                    spec.selection.record_ids_by_dataset.get(dataset, []),
+                    dataset,
                 )
             )
 
