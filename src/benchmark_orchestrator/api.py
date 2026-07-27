@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -142,7 +143,7 @@ def create_api(
             "invalid_request",
             "Request schema validation failed",
             request.state.request_id,
-            exc.errors(),
+            jsonable_encoder(exc.errors()),
         )
 
     @app.get("/api/health")

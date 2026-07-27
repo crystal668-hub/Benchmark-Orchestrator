@@ -60,6 +60,23 @@ def test_run_spec_requires_enough_finite_backoff_values() -> None:
         )
 
 
+def test_record_ids_accept_chinese_comma_separators() -> None:
+    spec = make_spec(
+        selection={
+            "record_ids_by_dataset": {
+                "verifier_grounded_rdkit": ["011，012\n013, 014"]
+            }
+        }
+    )
+
+    assert spec.selection.record_ids_by_dataset["verifier_grounded_rdkit"] == [
+        "011",
+        "012",
+        "013",
+        "014",
+    ]
+
+
 def adapter_for(config: OrchestratorConfig) -> CanonicalCliRuntimeAdapter:
     return CanonicalCliRuntimeAdapter(config)
 

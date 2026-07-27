@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=7">
+  <link rel="stylesheet" href="/styles.css?v=8">
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script defer src="/app.js?v=7"></script>
+  <script defer src="/app.js?v=8"></script>
 </head>
 <body>
   <header class="topbar">
@@ -98,15 +98,15 @@
               <div class="record-selectors" id="recordSelectors">
                 <label class="record-selector" data-record-selector="verifier_grounded_rdkit">
                   <span class="record-selector-heading"><i class="swatch rdkit"></i><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_rdkit" aria-label="RDKit Record IDs" placeholder="完整 ID 或三位题号；每行或逗号分隔；留空全选"></textarea>
+                  <textarea rows="2" data-record-dataset="verifier_grounded_rdkit" aria-label="RDKit Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
                 </label>
                 <label class="record-selector" data-record-selector="verifier_grounded_xtb_xyz" hidden>
                   <span class="record-selector-heading"><i class="swatch xtb"></i><span><strong>xTB / XYZ</strong><small>verifier_grounded_xtb_xyz</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_xtb_xyz" aria-label="xTB / XYZ Record IDs" placeholder="完整 ID 或三位题号；每行或逗号分隔；留空全选"></textarea>
+                  <textarea rows="2" data-record-dataset="verifier_grounded_xtb_xyz" aria-label="xTB / XYZ Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
                 </label>
                 <label class="record-selector" data-record-selector="verifier_grounded_property_calculation" hidden>
                   <span class="record-selector-heading"><i class="swatch property"></i><span><strong>Property</strong><small>verifier_grounded_property_calculation</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_property_calculation" aria-label="Property Record IDs" placeholder="完整 ID 或三位题号；每行或逗号分隔；留空全选"></textarea>
+                  <textarea rows="2" data-record-dataset="verifier_grounded_property_calculation" aria-label="Property Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
                 </label>
               </div>
               <p class="record-selector-empty" id="recordSelectorEmpty" hidden>请先选择数据集</p>

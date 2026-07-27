@@ -25,8 +25,8 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=7">' in index.text
-    assert '<script defer src="/app.js?v=7"></script>' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=8">' in index.text
+    assert '<script defer src="/app.js?v=8"></script>' in index.text
     assert '<thead id="recordHead"></thead>' in index.text
     assert 'id="evidencePanel"' not in index.text
     assert 'id="previewButton" type="submit"' in index.text
@@ -64,6 +64,30 @@ def test_preview_rejects_failed_runtime_preflight(
         {"name": "openclaw", "ok": False, "message": "not found"}
     ]
     app.state.service.adapter.execute_preview.assert_not_awaited()
+
+
+def test_invalid_record_id_returns_structured_validation_error(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.post(
+            "/api/runs/preview",
+            json={
+                "groups": ["single_llm_skills_on"],
+                "datasets": ["verifier_grounded_rdkit"],
+                "selection": {
+                    "record_ids_by_dataset": {
+                        "verifier_grounded_rdkit": ["011，../../secret"]
+                    }
+                },
+                "agent": {"model": "openai/gpt-5.5", "thinking": "high"},
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
 
 
 def test_preview_accepts_record_ids_grouped_by_dataset(

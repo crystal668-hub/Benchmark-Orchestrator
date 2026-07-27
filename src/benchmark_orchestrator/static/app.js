@@ -201,7 +201,7 @@ function updateRecordSelectors() {
 }
 
 function parseRecordIds(value) {
-  return String(value || "").split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+  return String(value || "").split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 function invalidatePreview() {

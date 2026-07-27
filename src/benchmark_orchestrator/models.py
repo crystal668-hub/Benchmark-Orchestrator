@@ -42,6 +42,22 @@ def _trim_unique(value: Any) -> Any:
     return normalized
 
 
+def _normalize_record_ids(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    normalized: list[Any] = []
+    for item in value:
+        if not isinstance(item, str):
+            normalized.append(item)
+            continue
+        normalized.extend(
+            part.strip() for part in re.split(r"[\n,，]+", item) if part.strip()
+        )
+    if len(normalized) != len({str(item) for item in normalized}):
+        raise ValueError("items must not contain duplicates")
+    return normalized
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -55,14 +71,17 @@ class SelectionSpec(StrictModel):
     @field_validator("record_ids", mode="before")
     @classmethod
     def normalize_record_ids(cls, value: Any) -> Any:
-        return _trim_unique(value)
+        return _normalize_record_ids(value)
 
     @field_validator("record_ids_by_dataset", mode="before")
     @classmethod
     def normalize_dataset_record_ids(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return value
-        return {dataset: _trim_unique(record_ids) for dataset, record_ids in value.items()}
+        return {
+            dataset: _normalize_record_ids(record_ids)
+            for dataset, record_ids in value.items()
+        }
 
     @field_validator("record_ids")
     @classmethod
