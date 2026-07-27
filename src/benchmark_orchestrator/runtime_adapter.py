@@ -16,6 +16,7 @@ from .models import (
     OrchestratorError,
     RunSpec,
     RuntimeCommand,
+    SelectionSpec,
     SelectedRecord,
 )
 
@@ -273,7 +274,13 @@ class CanonicalCliRuntimeAdapter:
             "checks": checks,
         }
 
-    def _selector_argv(self, spec: RunSpec) -> list[str]:
+    def _selector_argv(
+        self,
+        spec: RunSpec,
+        *,
+        record_ids: Sequence[str] | None = None,
+        apply_window: bool = True,
+    ) -> list[str]:
         argv = [
             *self.base_argv,
             "--groups",
@@ -281,11 +288,14 @@ class CanonicalCliRuntimeAdapter:
             "--datasets",
             ",".join(spec.datasets),
         ]
-        if spec.selection.record_ids:
-            argv += ["--record-ids", ",".join(spec.selection.record_ids)]
-        if spec.selection.offset:
+        selected_record_ids = (
+            spec.selection.record_ids if record_ids is None else record_ids
+        )
+        if selected_record_ids:
+            argv += ["--record-ids", ",".join(selected_record_ids)]
+        if apply_window and spec.selection.offset:
             argv += ["--offset", str(spec.selection.offset)]
-        if spec.selection.limit is not None:
+        if apply_window and spec.selection.limit is not None:
             argv += ["--limit", str(spec.selection.limit)]
         return argv
 
@@ -328,7 +338,14 @@ class CanonicalCliRuntimeAdapter:
 
     def build_run_command(self, frozen: FrozenRun, *, resume: bool) -> RuntimeCommand:
         spec = frozen.spec
-        argv = self._selector_argv(spec)
+        if spec.selection.record_ids_by_dataset:
+            argv = self._selector_argv(
+                spec,
+                record_ids=[record.record_id for record in frozen.selected_records],
+                apply_window=False,
+            )
+        else:
+            argv = self._selector_argv(spec)
         argv += ["--single-agent-model", spec.agent.model]
         argv += ["--single-agent-thinking", spec.agent.thinking]
         execution = spec.execution
@@ -355,6 +372,50 @@ class CanonicalCliRuntimeAdapter:
 
     async def execute_preview(
         self, spec: RunSpec, *, timeout_seconds: float = 120
+    ) -> list[SelectedRecord]:
+        if not spec.selection.record_ids_by_dataset:
+            return await self._execute_preview(spec, timeout_seconds=timeout_seconds)
+
+        records: list[SelectedRecord] = []
+        for dataset in spec.datasets:
+            dataset_spec = spec.model_copy(
+                update={
+                    "datasets": [dataset],
+                    "selection": SelectionSpec(
+                        record_ids=spec.selection.record_ids_by_dataset.get(dataset, [])
+                    ),
+                }
+            )
+            records.extend(
+                await self._execute_preview(
+                    dataset_spec, timeout_seconds=timeout_seconds
+                )
+            )
+
+        duplicate_ids = sorted(
+            record_id
+            for record_id in {record.record_id for record in records}
+            if sum(record.record_id == record_id for record in records) > 1
+        )
+        if duplicate_ids:
+            raise OrchestratorError(
+                "selection_invalid",
+                "Canonical runtime cannot disambiguate record id(s) across datasets: "
+                + ", ".join(duplicate_ids),
+                status_code=422,
+            )
+
+        records = records[spec.selection.offset :]
+        if spec.selection.limit is not None:
+            records = records[: spec.selection.limit]
+        if not records:
+            raise OrchestratorError(
+                "selection_invalid", "No benchmark records selected.", status_code=422
+            )
+        return records
+
+    async def _execute_preview(
+        self, spec: RunSpec, *, timeout_seconds: float
     ) -> list[SelectedRecord]:
         command = self.build_preview_command(spec)
         try:

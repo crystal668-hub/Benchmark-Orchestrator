@@ -48,6 +48,7 @@ class StrictModel(BaseModel):
 
 class SelectionSpec(StrictModel):
     record_ids: list[str] = Field(default_factory=list)
+    record_ids_by_dataset: dict[DatasetId, list[str]] = Field(default_factory=dict)
     offset: int = Field(default=0, ge=0)
     limit: int | None = Field(default=None, ge=1)
 
@@ -56,6 +57,13 @@ class SelectionSpec(StrictModel):
     def normalize_record_ids(cls, value: Any) -> Any:
         return _trim_unique(value)
 
+    @field_validator("record_ids_by_dataset", mode="before")
+    @classmethod
+    def normalize_dataset_record_ids(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        return {dataset: _trim_unique(record_ids) for dataset, record_ids in value.items()}
+
     @field_validator("record_ids")
     @classmethod
     def validate_record_ids(cls, value: list[str]) -> list[str]:
@@ -63,6 +71,23 @@ class SelectionSpec(StrictModel):
             if not _RECORD_ID.fullmatch(record_id):
                 raise ValueError(f"invalid record id: {record_id!r}")
         return value
+
+    @field_validator("record_ids_by_dataset")
+    @classmethod
+    def validate_dataset_record_ids(
+        cls, value: dict[DatasetId, list[str]]
+    ) -> dict[DatasetId, list[str]]:
+        for record_ids in value.values():
+            cls.validate_record_ids(record_ids)
+        return value
+
+    @model_validator(mode="after")
+    def reject_mixed_record_id_formats(self) -> SelectionSpec:
+        if self.record_ids and self.record_ids_by_dataset:
+            raise ValueError(
+                "record_ids and record_ids_by_dataset must not be used together"
+            )
+        return self
 
 
 class AgentSpec(StrictModel):
@@ -126,6 +151,16 @@ class RunSpec(StrictModel):
         if value is None:
             return None
         return value.strip() or None
+
+    @model_validator(mode="after")
+    def validate_selection_datasets(self) -> RunSpec:
+        unknown = set(self.selection.record_ids_by_dataset) - set(self.datasets)
+        if unknown:
+            raise ValueError(
+                "record selection includes unselected dataset(s): "
+                + ", ".join(sorted(unknown))
+            )
+        return self
 
 
 class SelectedRecord(StrictModel):

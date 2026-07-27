@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from benchmark_orchestrator.app import build_app
 from benchmark_orchestrator.config import OrchestratorConfig
+from benchmark_orchestrator.models import SelectedRecord
 from tests.fake_runtime import result, write_json
 from tests.helpers import seed_controlled_run
 
@@ -24,13 +25,15 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=5">' in index.text
-    assert '<script defer src="/app.js?v=5"></script>' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=6">' in index.text
+    assert '<script defer src="/app.js?v=6"></script>' in index.text
     assert '<thead id="recordHead"></thead>' in index.text
     assert 'id="evidencePanel"' not in index.text
     assert 'id="previewButton" type="submit"' in index.text
     assert 'id="startButton" type="button"' in index.text
     assert 'id="count-xtb_xyz">20</b>' in index.text
+    assert 'data-record-dataset="verifier_grounded_rdkit"' in index.text
+    assert 'data-record-dataset="verifier_grounded_xtb_xyz"' in index.text
 
 
 def test_preview_rejects_failed_runtime_preflight(
@@ -61,6 +64,62 @@ def test_preview_rejects_failed_runtime_preflight(
         {"name": "openclaw", "ok": False, "message": "not found"}
     ]
     app.state.service.adapter.execute_preview.assert_not_awaited()
+
+
+def test_preview_accepts_record_ids_grouped_by_dataset(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    app.state.service.adapter.inspect_capabilities = AsyncMock(
+        return_value={"ready": True, "checks": []}
+    )
+    app.state.service.adapter.execute_preview = AsyncMock(
+        return_value=[
+            SelectedRecord(
+                record_id="rdkit_qed_max_001",
+                dataset="verifier_grounded_rdkit",
+            ),
+            SelectedRecord(
+                record_id="xtb_gap_window_001",
+                dataset="verifier_grounded_xtb_xyz",
+            ),
+        ]
+    )
+    app.state.service.adapter.runtime_revision = AsyncMock(
+        return_value=("revision", False)
+    )
+    app.state.service.adapter.release_identity = lambda: {
+        "version": "0.3.0",
+        "wheel_sha256": "a" * 64,
+        "datasets": [],
+    }
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.post(
+            "/api/runs/preview",
+            json={
+                "groups": ["single_llm_skills_on"],
+                "datasets": [
+                    "verifier_grounded_rdkit",
+                    "verifier_grounded_xtb_xyz",
+                ],
+                "selection": {
+                    "record_ids_by_dataset": {
+                        "verifier_grounded_rdkit": ["rdkit_qed_max_001"],
+                        "verifier_grounded_xtb_xyz": ["xtb_gap_window_001"],
+                    }
+                },
+                "agent": {"model": "openai/gpt-5.5", "thinking": "high"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["normalized_spec"]["selection"][
+        "record_ids_by_dataset"
+    ] == {
+        "verifier_grounded_rdkit": ["rdkit_qed_max_001"],
+        "verifier_grounded_xtb_xyz": ["xtb_gap_window_001"],
+    }
 
 
 def test_create_rejects_failed_runtime_preflight(

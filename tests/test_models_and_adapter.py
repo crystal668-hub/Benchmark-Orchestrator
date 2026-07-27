@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
 
 from benchmark_orchestrator.config import OrchestratorConfig
-from benchmark_orchestrator.models import FrozenRun, RunSpec
+from benchmark_orchestrator.models import FrozenRun, RunSpec, SelectedRecord
 from benchmark_orchestrator.runtime_adapter import CanonicalCliRuntimeAdapter
 from tests.helpers import make_spec
 
@@ -18,6 +19,31 @@ def test_run_spec_rejects_extra_duplicates_and_unsafe_ids() -> None:
         make_spec(groups=["single_llm_skills_on", " single_llm_skills_on "])
     with pytest.raises(ValidationError, match="invalid record id"):
         make_spec(selection={"record_ids": ["../../secret"]})
+    with pytest.raises(ValidationError, match="must not be used together"):
+        make_spec(
+            selection={
+                "record_ids": ["rdkit_qed_max_001"],
+                "record_ids_by_dataset": {
+                    "verifier_grounded_rdkit": ["rdkit_sa_min_002"]
+                },
+            }
+        )
+    with pytest.raises(ValidationError, match="unselected dataset"):
+        make_spec(
+            selection={
+                "record_ids_by_dataset": {
+                    "verifier_grounded_xtb_xyz": ["xtb_gap_window_001"]
+                }
+            }
+        )
+    with pytest.raises(ValidationError, match="invalid record id"):
+        make_spec(
+            selection={
+                "record_ids_by_dataset": {
+                    "verifier_grounded_rdkit": ["../../secret"]
+                }
+            }
+        )
 
 
 def test_run_spec_requires_enough_finite_backoff_values() -> None:
@@ -130,6 +156,60 @@ def test_preview_excludes_execution_flags_and_parser_is_strict(
     assert records[0].record_id == "r1"
     with pytest.raises(Exception, match="preview root must be a list"):
         adapter.parse_preview("{}")
+
+
+@pytest.mark.asyncio
+async def test_dataset_record_selection_resolves_each_dataset_before_windowing(
+    config: OrchestratorConfig,
+) -> None:
+    spec = make_spec(
+        datasets=["verifier_grounded_rdkit", "verifier_grounded_xtb_xyz"],
+        selection={
+            "record_ids_by_dataset": {
+                "verifier_grounded_rdkit": ["rdkit_qed_max_001"],
+                "verifier_grounded_xtb_xyz": [],
+            },
+            "offset": 1,
+            "limit": 1,
+        },
+    )
+    adapter = adapter_for(config)
+    adapter._execute_preview = AsyncMock(
+        side_effect=[
+            [
+                SelectedRecord(
+                    record_id="rdkit_qed_max_001",
+                    dataset="verifier_grounded_rdkit",
+                )
+            ],
+            [
+                SelectedRecord(
+                    record_id="xtb_gap_window_001",
+                    dataset="verifier_grounded_xtb_xyz",
+                ),
+                SelectedRecord(
+                    record_id="xtb_dipole_window_002",
+                    dataset="verifier_grounded_xtb_xyz",
+                ),
+            ],
+        ]
+    )
+
+    records = await adapter.execute_preview(spec)
+
+    assert [record.record_id for record in records] == ["xtb_gap_window_001"]
+    calls = adapter._execute_preview.await_args_list
+    assert calls[0].args[0].selection.record_ids == ["rdkit_qed_max_001"]
+    assert calls[1].args[0].selection.record_ids == []
+
+    frozen = frozen_for(config, spec).model_copy(
+        update={"selected_records": records}
+    )
+    command = adapter.build_run_command(frozen, resume=False)
+    record_flag = command.argv.index("--record-ids")
+    assert command.argv[record_flag + 1] == "xtb_gap_window_001"
+    assert "--offset" not in command.argv
+    assert "--limit" not in command.argv
 
 
 def test_output_path_matches_canonical_classification(

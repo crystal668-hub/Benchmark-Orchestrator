@@ -191,6 +191,28 @@ function updateRunName() {
   $("#derivedRunName").value = `${slug(dataset)}-${slug(model)}-{启动时间}`;
 }
 
+function updateRecordSelectors() {
+  const selected = new Set([...document.querySelectorAll("[name=datasets]:checked")].map((input) => input.value));
+  document.querySelectorAll("[data-record-selector]").forEach((selector) => {
+    selector.hidden = !selected.has(selector.dataset.recordSelector);
+  });
+  $("#recordSelectorEmpty").hidden = selected.size > 0;
+  refreshResizablePanels();
+}
+
+function parseRecordIds(value) {
+  return String(value || "").split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function invalidatePreview() {
+  if (!state.preview) return;
+  state.preview = null;
+  $("#previewBand").hidden = true;
+  $("#formStatus").textContent = "配置已变更，请重新预览";
+  $("#specDigest").textContent = "";
+  updateRuntimeControls();
+}
+
 function renderModels(models, defaultModel) {
   const select = $("#modelSelect");
   select.innerHTML = models.length
@@ -257,14 +279,19 @@ function renderRunList() {
 
 function formSpec() {
   const form = new FormData($("#runForm"));
-  const recordIds = String(form.get("record_ids") || "").split(/[\n,]+/).map((value) => value.trim()).filter(Boolean);
+  const datasets = form.getAll("datasets");
+  const recordIdsByDataset = Object.fromEntries(
+    [...document.querySelectorAll("[data-record-dataset]")]
+      .filter((input) => datasets.includes(input.dataset.recordDataset))
+      .map((input) => [input.dataset.recordDataset, parseRecordIds(input.value)])
+  );
   const retries = Number(form.get("timeout_retries"));
   return {
     schema_version: 1,
     name: null,
     groups: form.getAll("groups"),
-    datasets: form.getAll("datasets"),
-    selection: { record_ids: recordIds, offset: Number(form.get("offset") || 0), limit: form.get("limit") ? Number(form.get("limit")) : null },
+    datasets,
+    selection: { record_ids_by_dataset: recordIdsByDataset, offset: Number(form.get("offset") || 0), limit: form.get("limit") ? Number(form.get("limit")) : null },
     agent: { model: String(form.get("model") || "").trim(), thinking: form.get("thinking") },
     execution: {
       timeout_seconds: form.get("no_timeout") ? null : Number(form.get("timeout_seconds")),
@@ -419,6 +446,8 @@ function initialize() {
     localStorage.setItem("bo-theme", theme);
   });
   $("#runForm").addEventListener("submit", previewRun);
+  $("#runForm").addEventListener("input", invalidatePreview);
+  $("#runForm").addEventListener("change", invalidatePreview);
   $("#startButton").addEventListener("click", startRun);
   $("#homeButton").addEventListener("click", showCreate);
   $("#newRunButton").addEventListener("click", showCreate);
@@ -443,8 +472,12 @@ function initialize() {
   $("#resumeButton").addEventListener("click", () => command("resume"));
   $("#noTimeout").addEventListener("change", (event) => { $("[name=timeout_seconds]").disabled = event.target.checked; });
   $("#modelSelect").addEventListener("change", updateRunName);
-  document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", updateRunName));
+  document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", () => {
+    updateRunName();
+    updateRecordSelectors();
+  }));
   window.addEventListener("load", () => { if (window.lucide) window.lucide.createIcons(); });
+  updateRecordSelectors();
   initResizablePanels();
   updateRuntimeControls();
   Promise.all([loadCapabilities(), loadRuns()]);
