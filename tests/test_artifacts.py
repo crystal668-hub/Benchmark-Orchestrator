@@ -44,6 +44,16 @@ def test_discovers_classified_run_without_descending_into_recovery(
     assert [path.name for path in reader.candidate_run_dirs()] == ["primary"]
 
 
+def test_ignores_legacy_workspace_archive_tree(tmp_path: Path) -> None:
+    current = demo_run(tmp_path, "current")
+    archive_root = tmp_path / "legacy-workspace-archives"
+    demo_run(archive_root, "archived")
+
+    assert ArtifactReader(tmp_path).candidate_run_dirs() == [current]
+    assert ArtifactReader(archive_root).candidate_run_dirs() == []
+    assert ArtifactReader(archive_root / "formal").candidate_run_dirs() == []
+
+
 def test_checkpoint_uses_payload_identity_and_flags_corruption(tmp_path: Path) -> None:
     run = demo_run(tmp_path)
     corrupt = run / "per-record/single_llm_skills_on/corrupt.json"

@@ -33,6 +33,7 @@ ALLOWED_ASSET_ROOTS = {
     "agent-workspace-archives",
     "agent-workspace-quarantine",
 }
+IGNORED_RUN_TREE_NAMES = {"legacy-workspace-archives"}
 
 
 def _load_json(path: Path) -> Any:
@@ -74,11 +75,16 @@ class ArtifactReader:
 
     def candidate_run_dirs(self) -> list[Path]:
         candidates: list[Path] = []
-        if not self.run_root.exists():
+        if not self.run_root.exists() or any(
+            part in IGNORED_RUN_TREE_NAMES for part in self.run_root.parts
+        ):
             return candidates
         if self.looks_like_run(self.run_root):
             return [self.run_root]
         for current, directories, _files in os.walk(self.run_root):
+            directories[:] = [
+                name for name in directories if name not in IGNORED_RUN_TREE_NAMES
+            ]
             path = Path(current)
             if path == self.run_root or not self.looks_like_run(path):
                 continue
