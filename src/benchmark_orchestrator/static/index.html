@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=8">
+  <link rel="stylesheet" href="/styles.css?v=9">
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script defer src="/app.js?v=8"></script>
+  <script defer src="/app.js?v=9"></script>
 </head>
 <body>
   <header class="topbar">
@@ -63,8 +63,24 @@
         <form id="runForm">
           <div class="form-band identity-band">
             <label>运行名称<input id="derivedRunName" type="text" value="正在读取模型配置…" readonly></label>
-            <label>模型
-              <select name="model" id="modelSelect" required disabled><option value="">正在读取 OpenClaw 配置…</option></select>
+            <label class="model-field">模型
+              <div class="model-picker" id="modelPicker">
+                <button class="model-picker-trigger" id="modelPickerTrigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="modelPickerMenu" aria-required="true" disabled>
+                  <span class="model-picker-value" id="modelPickerValue"><strong>正在读取模型配置…</strong><small>OpenClaw</small></span>
+                  <i data-lucide="chevrons-up-down" aria-hidden="true"></i>
+                </button>
+                <div class="model-picker-menu" id="modelPickerMenu" hidden>
+                  <div class="model-provider-panel">
+                    <span class="model-picker-kicker">PROVIDERS</span>
+                    <div id="providerOptions" role="menu" aria-label="Provider"></div>
+                  </div>
+                  <div class="model-model-panel" id="modelOptionsPanel" hidden>
+                    <span class="model-picker-kicker" id="modelOptionsHeading">MODELS</span>
+                    <div id="modelOptions" role="menu" aria-label="模型"></div>
+                  </div>
+                </div>
+              </div>
+              <select name="model" id="modelSelect" required disabled hidden><option value="">正在读取 OpenClaw 配置…</option></select>
             </label>
             <label>Thinking
               <select name="thinking">

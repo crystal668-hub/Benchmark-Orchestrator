@@ -1,4 +1,5 @@
 const state = { capabilities: null, preview: null, runs: [], activeRunId: null, pollTimer: null };
+const modelPickerState = { models: [], providers: [], activeProvider: "" };
 const $ = (selector) => document.querySelector(selector);
 
 async function api(path, options = {}) {
@@ -213,6 +214,166 @@ function invalidatePreview() {
   updateRuntimeControls();
 }
 
+function currentModel() {
+  return modelPickerState.models.find((model) => model.id === $("#modelSelect").value) || null;
+}
+
+function modelsForProvider(provider) {
+  return modelPickerState.models.filter((model) => model.provider === provider);
+}
+
+function refreshPickerIcons() {
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function updateModelPickerValue() {
+  const model = currentModel();
+  const value = $("#modelPickerValue");
+  const trigger = $("#modelPickerTrigger");
+  value.innerHTML = model
+    ? `<strong>${escapeHtml(model.label)}</strong><small>${escapeHtml(model.provider)} · ${escapeHtml(model.id)}</small>`
+    : '<strong>选择模型</strong><small>先选择 Provider</small>';
+  trigger.disabled = $("#modelSelect").disabled;
+  trigger.setAttribute("aria-label", model ? `当前模型 ${model.label}` : "选择模型");
+}
+
+function renderProviderOptions() {
+  $("#providerOptions").innerHTML = modelPickerState.providers.map((provider) => {
+    const models = modelsForProvider(provider);
+    const active = provider === modelPickerState.activeProvider;
+    return `<button class="model-provider-option${active ? " active" : ""}" type="button" role="menuitem" data-provider="${escapeHtml(provider)}" aria-haspopup="true" aria-expanded="${active}">
+      <span><strong>${escapeHtml(provider)}</strong><small>${models.length} 个模型</small></span><i data-lucide="chevron-right" aria-hidden="true"></i>
+    </button>`;
+  }).join("");
+  refreshPickerIcons();
+}
+
+function renderModelOptions() {
+  const panel = $("#modelOptionsPanel");
+  const models = modelsForProvider(modelPickerState.activeProvider);
+  panel.hidden = !models.length;
+  $("#modelOptionsHeading").textContent = `${modelPickerState.activeProvider} / MODELS`;
+  $("#modelOptions").innerHTML = models.map((model) => {
+    const selected = model.id === $("#modelSelect").value;
+    return `<button class="model-option${selected ? " selected" : ""}" type="button" role="menuitem" data-model-id="${escapeHtml(model.id)}" aria-selected="${selected}">
+      <span class="model-option-copy"><strong>${escapeHtml(model.label)}</strong><small>${escapeHtml(model.id)}</small></span>
+      ${selected ? '<i data-lucide="check" aria-hidden="true"></i>' : ""}
+    </button>`;
+  }).join("");
+  refreshPickerIcons();
+}
+
+function setActiveProvider(provider, focusModel = false) {
+  if (!modelPickerState.providers.includes(provider)) return;
+  const changed = modelPickerState.activeProvider !== provider;
+  modelPickerState.activeProvider = provider;
+  if (changed) {
+    renderProviderOptions();
+    renderModelOptions();
+  }
+  if (focusModel) $("#modelOptions [data-model-id]")?.focus();
+}
+
+function closeModelPicker(restoreFocus = false) {
+  $("#modelPickerMenu").hidden = true;
+  $("#modelPickerTrigger").setAttribute("aria-expanded", "false");
+  if (restoreFocus) $("#modelPickerTrigger").focus();
+}
+
+function openModelPicker() {
+  const trigger = $("#modelPickerTrigger");
+  if (trigger.disabled) return;
+  const model = currentModel();
+  setActiveProvider(model?.provider || modelPickerState.providers[0]);
+  $("#modelPickerMenu").hidden = false;
+  trigger.setAttribute("aria-expanded", "true");
+}
+
+function chooseModel(modelId) {
+  const model = modelPickerState.models.find((item) => item.id === modelId);
+  if (!model) return;
+  const select = $("#modelSelect");
+  select.value = model.id;
+  updateModelPickerValue();
+  closeModelPicker();
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function moveMenuFocus(items, current, direction) {
+  const index = items.indexOf(current);
+  if (index < 0) return;
+  items[(index + direction + items.length) % items.length]?.focus();
+}
+
+function handleModelPickerKeydown(event) {
+  const providerButton = event.target.closest("[data-provider]");
+  const modelButton = event.target.closest("[data-model-id]");
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeModelPicker(true);
+    return;
+  }
+  if (providerButton) {
+    const providers = [...$("#providerOptions").querySelectorAll("[data-provider]")];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveMenuFocus(providers, providerButton, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setActiveProvider(providerButton.dataset.provider, true);
+    }
+    return;
+  }
+  if (modelButton) {
+    const models = [...$("#modelOptions").querySelectorAll("[data-model-id]")];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveMenuFocus(models, modelButton, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      $("#providerOptions [data-provider].active")?.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      chooseModel(modelButton.dataset.modelId);
+    }
+  }
+}
+
+function initModelPicker() {
+  const picker = $("#modelPicker");
+  const menu = $("#modelPickerMenu");
+  const trigger = $("#modelPickerTrigger");
+  trigger.addEventListener("click", () => {
+    if (menu.hidden) openModelPicker();
+    else closeModelPicker();
+  });
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openModelPicker();
+    }
+  });
+  menu.addEventListener("pointerover", (event) => {
+    const providerButton = event.target.closest("[data-provider]");
+    if (providerButton) setActiveProvider(providerButton.dataset.provider);
+  });
+  menu.addEventListener("focusin", (event) => {
+    const providerButton = event.target.closest("[data-provider]");
+    if (providerButton) setActiveProvider(providerButton.dataset.provider);
+  });
+  menu.addEventListener("click", (event) => {
+    const modelButton = event.target.closest("[data-model-id]");
+    if (modelButton) chooseModel(modelButton.dataset.modelId);
+  });
+  menu.addEventListener("keydown", handleModelPickerKeydown);
+  document.addEventListener("pointerdown", (event) => {
+    if (!picker.contains(event.target)) closeModelPicker();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) closeModelPicker(true);
+  });
+}
+
 function renderModels(models, defaultModel) {
   const select = $("#modelSelect");
   select.innerHTML = models.length
@@ -220,12 +381,19 @@ function renderModels(models, defaultModel) {
     : '<option value="">未发现可用模型</option>';
   select.disabled = models.length === 0;
   if (models.some((model) => model.id === defaultModel)) select.value = defaultModel;
+  modelPickerState.models = models;
+  modelPickerState.providers = [...new Set(models.map((model) => model.provider))];
+  modelPickerState.activeProvider = currentModel()?.provider || modelPickerState.providers[0] || "";
+  renderProviderOptions();
+  renderModelOptions();
+  updateModelPickerValue();
   updateRunName();
 }
 
 function updateRuntimeControls() {
   const ready = Boolean(state.capabilities?.ready);
-  $("#previewButton").disabled = !ready;
+  const hasModel = Boolean($("#modelSelect").value);
+  $("#previewButton").disabled = !ready || !hasModel;
   $("#startButton").disabled = !ready || !state.preview;
 }
 
@@ -471,6 +639,7 @@ function initialize() {
   $("#cancelButton").addEventListener("click", () => command("cancel"));
   $("#resumeButton").addEventListener("click", () => command("resume"));
   $("#noTimeout").addEventListener("change", (event) => { $("[name=timeout_seconds]").disabled = event.target.checked; });
+  initModelPicker();
   $("#modelSelect").addEventListener("change", updateRunName);
   document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", () => {
     updateRunName();
