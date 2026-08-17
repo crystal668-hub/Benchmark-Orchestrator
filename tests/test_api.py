@@ -17,6 +17,7 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     with TestClient(app, base_url="http://127.0.0.1:8875") as client:
         health = client.get("/api/health")
         index = client.get("/")
+        lucide = client.get("/lucide.min.js")
         invalid = client.post(
             "/api/runs/preview", json={"groups": [], "datasets": [], "agent": {}}
         )
@@ -26,7 +27,11 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
     assert '<link rel="stylesheet" href="/styles.css?v=9">' in index.text
+    assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
     assert '<script defer src="/app.js?v=9"></script>' in index.text
+    assert "https://unpkg.com" not in index.text
+    assert lucide.status_code == 200
+    assert "lucide v0.468.0" in lucide.text
     assert 'id="modelPicker"' in index.text
     assert 'id="providerOptions" role="menu"' in index.text
     assert 'id="modelOptions" role="menu"' in index.text
