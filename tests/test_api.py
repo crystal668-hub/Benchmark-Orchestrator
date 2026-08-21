@@ -121,7 +121,7 @@ def test_preview_accepts_record_ids_grouped_by_dataset(
         return_value=("revision", False)
     )
     app.state.service.adapter.release_identity = lambda: {
-        "version": "0.3.0",
+        "version": "0.5.0",
         "wheel_sha256": "a" * 64,
         "datasets": [],
     }

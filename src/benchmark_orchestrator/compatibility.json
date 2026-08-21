@@ -4,14 +4,14 @@
   "runtime": {
     "harness": "openclaw",
     "verified_cli_version": "2026.6.9",
-    "verified_runtime_revision": "167980c896c7189a1fe1f5df110e3896c3e6ad23",
+    "verified_runtime_revision": "dca714c3ab5c89500b80854dac0a4a53b0c85b9a",
     "canonical_cli_contract": "benchmarking.workflow.cli.flags-v1",
     "artifact_schema_versions": [2, 3]
   },
   "vgb_release": {
     "package": "verifier-grounded-benchmark",
-    "version": "0.3.0",
-    "wheel_sha256": "b93c18b818e8d19993e817de6439ccea910b36a8f386c551078b7c6b10420381",
+    "version": "0.5.0",
+    "wheel_sha256": "fb99d63fef0fd45a43ed8a074be93c7963c947ec2e371fe27b84a52fc5bdb98e",
     "scoring_profile": "linear_goal_v2",
     "package_result_schema": 2
   }

@@ -118,7 +118,7 @@ def frozen_for(config: OrchestratorConfig, spec: RunSpec) -> FrozenRun:
         spec_sha256="a" * 64,
         selected_records=[],
         selected_pairs=[],
-        vgb_release_version="0.3.0",
+        vgb_release_version="0.5.0",
         vgb_wheel_sha256="b" * 64,
         created_at="2026-07-21T00:00:00Z",
     )
