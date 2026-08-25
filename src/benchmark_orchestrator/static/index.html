@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=10">
+  <link rel="stylesheet" href="/styles.css?v=11">
   <script defer src="/lucide.min.js?v=0.468.0"></script>
-  <script defer src="/app.js?v=10"></script>
+  <script defer src="/app.js?v=11"></script>
 </head>
 <body>
   <header class="topbar">
@@ -119,9 +119,9 @@
                     <div class="record-range">
                       <span class="field-label">范围选择</span>
                       <div class="record-range-inputs">
-                        <label>从<input type="text" data-record-range-start="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="RDKit 范围起始题号" autocomplete="off"></label>
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" placeholder="005" aria-label="RDKit 范围起始题号" autocomplete="off"></label>
                         <span class="record-range-dash" aria-hidden="true">-</span>
-                        <label>到<input type="text" data-record-range-end="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="RDKit 范围结束题号" autocomplete="off"></label>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" placeholder="010" aria-label="RDKit 范围结束题号" autocomplete="off"></label>
                       </div>
                     </div>
                   </div>
@@ -133,9 +133,9 @@
                     <div class="record-range">
                       <span class="field-label">范围选择</span>
                       <div class="record-range-inputs">
-                        <label>从<input type="text" data-record-range-start="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="xTB / XYZ 范围起始题号" autocomplete="off"></label>
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" placeholder="005" aria-label="xTB / XYZ 范围起始题号" autocomplete="off"></label>
                         <span class="record-range-dash" aria-hidden="true">-</span>
-                        <label>到<input type="text" data-record-range-end="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="xTB / XYZ 范围结束题号" autocomplete="off"></label>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" placeholder="010" aria-label="xTB / XYZ 范围结束题号" autocomplete="off"></label>
                       </div>
                     </div>
                   </div>
@@ -147,9 +147,9 @@
                     <div class="record-range">
                       <span class="field-label">范围选择</span>
                       <div class="record-range-inputs">
-                        <label>从<input type="text" data-record-range-start="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="Property 范围起始题号" autocomplete="off"></label>
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" placeholder="005" aria-label="Property 范围起始题号" autocomplete="off"></label>
                         <span class="record-range-dash" aria-hidden="true">-</span>
-                        <label>到<input type="text" data-record-range-end="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="Property 范围结束题号" autocomplete="off"></label>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" placeholder="010" aria-label="Property 范围结束题号" autocomplete="off"></label>
                       </div>
                     </div>
                   </div>

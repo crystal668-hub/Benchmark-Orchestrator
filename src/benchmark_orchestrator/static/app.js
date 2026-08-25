@@ -212,14 +212,14 @@ function expandRecordRange(startValue, endValue) {
   if (!start || !end) throw new Error("范围选择需要同时填写起始和结束题号");
   if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) throw new Error("范围题号只能包含数字");
 
-  const startNumber = Number(start);
-  const endNumber = Number(end);
-  if (!Number.isSafeInteger(startNumber) || !Number.isSafeInteger(endNumber)) throw new Error("范围题号过大");
-  if (startNumber > endNumber) throw new Error("范围起始题号不能大于结束题号");
-  if (endNumber - startNumber > 65535) throw new Error("范围最多支持 65536 道题");
+  const startNumber = BigInt(start);
+  const endNumber = BigInt(end);
+  const count = endNumber - startNumber + 1n;
+  if (count <= 0n) throw new Error("范围起始题号不能大于结束题号");
+  if (count > 65536n) throw new Error("范围最多支持 65536 道题");
 
   const width = Math.max(start.length, end.length, 3);
-  return Array.from({ length: endNumber - startNumber + 1 }, (_, index) => String(startNumber + index).padStart(width, "0"));
+  return Array.from({ length: Number(count) }, (_, index) => (startNumber + BigInt(index)).toString().padStart(width, "0"));
 }
 
 function recordIdsForSelector(selector) {
