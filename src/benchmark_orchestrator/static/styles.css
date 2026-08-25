@@ -215,7 +215,16 @@ legend span { color: var(--orange); font: 700 10px/1 ui-monospace, monospace; ma
 .record-selector-heading strong, .record-selector-heading small { display: block; }
 .record-selector-heading strong { color: var(--ink); font-size: 13px; }
 .record-selector-heading small { margin-top: 3px; color: var(--faint); font: 9px/1.35 ui-monospace, monospace; overflow-wrap: anywhere; }
+.record-selector-controls { display: grid; gap: 10px; min-width: 0; }
+.record-id-field, .record-range { min-width: 0; }
+.field-label { display: block; margin-bottom: 6px; color: var(--muted); font: 700 10px/1.2 ui-monospace, monospace; text-transform: uppercase; }
 .record-selector textarea { min-height: 62px; margin-top: 0; }
+.record-range { display: grid; grid-template-columns: minmax(68px, .38fr) minmax(170px, 1fr); gap: 10px; align-items: center; }
+.record-range .field-label { margin-bottom: 0; }
+.record-range-inputs { display: grid; grid-template-columns: minmax(58px, 1fr) 15px minmax(58px, 1fr); gap: 7px; align-items: end; }
+.record-range-inputs label { color: var(--faint); font: 700 9px/1.2 ui-monospace, monospace; }
+.record-range-inputs input { margin-top: 5px; padding: 8px 9px; font: 12px/1 ui-monospace, monospace; text-align: center; }
+.record-range-dash { padding-bottom: 12px; color: var(--faint); text-align: center; font: 700 12px/1 ui-monospace, monospace; }
 .record-selector-empty { margin: 12px 0 0; color: var(--faint); font-size: 12px; }
 .segment-stack { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 16px; }
 .segment-stack input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; min-height: 1px; margin: 0; }

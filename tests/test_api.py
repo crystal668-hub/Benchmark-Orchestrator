@@ -26,9 +26,9 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=9">' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=10">' in index.text
     assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
-    assert '<script defer src="/app.js?v=9"></script>' in index.text
+    assert '<script defer src="/app.js?v=10"></script>' in index.text
     assert "https://unpkg.com" not in index.text
     assert lucide.status_code == 200
     assert "lucide v0.468.0" in lucide.text
@@ -42,6 +42,10 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert 'id="count-xtb_xyz">20</b>' in index.text
     assert 'data-record-dataset="verifier_grounded_rdkit"' in index.text
     assert 'data-record-dataset="verifier_grounded_xtb_xyz"' in index.text
+    assert 'data-record-range-start="verifier_grounded_rdkit"' in index.text
+    assert 'data-record-range-end="verifier_grounded_rdkit"' in index.text
+    assert 'data-record-range-start="verifier_grounded_xtb_xyz"' in index.text
+    assert 'data-record-range-end="verifier_grounded_xtb_xyz"' in index.text
 
 
 def test_preview_rejects_failed_runtime_preflight(

@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=9">
+  <link rel="stylesheet" href="/styles.css?v=10">
   <script defer src="/lucide.min.js?v=0.468.0"></script>
-  <script defer src="/app.js?v=9"></script>
+  <script defer src="/app.js?v=10"></script>
 </head>
 <body>
   <header class="topbar">
@@ -112,18 +112,48 @@
             <fieldset class="form-section selection-section">
               <legend><span>03</span> Record 选择</legend>
               <div class="record-selectors" id="recordSelectors">
-                <label class="record-selector" data-record-selector="verifier_grounded_rdkit">
+                <div class="record-selector" data-record-selector="verifier_grounded_rdkit">
                   <span class="record-selector-heading"><i class="swatch rdkit"></i><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_rdkit" aria-label="RDKit Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
-                </label>
-                <label class="record-selector" data-record-selector="verifier_grounded_xtb_xyz" hidden>
+                  <div class="record-selector-controls">
+                    <label class="record-id-field"><span class="field-label">直接输入 ID</span><textarea rows="2" data-record-dataset="verifier_grounded_rdkit" aria-label="RDKit Record IDs" placeholder="完整 ID 或单个题号；每行或中英文逗号分隔；留空全选"></textarea></label>
+                    <div class="record-range">
+                      <span class="field-label">范围选择</span>
+                      <div class="record-range-inputs">
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="RDKit 范围起始题号" autocomplete="off"></label>
+                        <span class="record-range-dash" aria-hidden="true">-</span>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_rdkit" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="RDKit 范围结束题号" autocomplete="off"></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="record-selector" data-record-selector="verifier_grounded_xtb_xyz" hidden>
                   <span class="record-selector-heading"><i class="swatch xtb"></i><span><strong>xTB / XYZ</strong><small>verifier_grounded_xtb_xyz</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_xtb_xyz" aria-label="xTB / XYZ Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
-                </label>
-                <label class="record-selector" data-record-selector="verifier_grounded_property_calculation" hidden>
+                  <div class="record-selector-controls">
+                    <label class="record-id-field"><span class="field-label">直接输入 ID</span><textarea rows="2" data-record-dataset="verifier_grounded_xtb_xyz" aria-label="xTB / XYZ Record IDs" placeholder="完整 ID 或单个题号；每行或中英文逗号分隔；留空全选"></textarea></label>
+                    <div class="record-range">
+                      <span class="field-label">范围选择</span>
+                      <div class="record-range-inputs">
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="xTB / XYZ 范围起始题号" autocomplete="off"></label>
+                        <span class="record-range-dash" aria-hidden="true">-</span>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_xtb_xyz" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="xTB / XYZ 范围结束题号" autocomplete="off"></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="record-selector" data-record-selector="verifier_grounded_property_calculation" hidden>
                   <span class="record-selector-heading"><i class="swatch property"></i><span><strong>Property</strong><small>verifier_grounded_property_calculation</small></span></span>
-                  <textarea rows="2" data-record-dataset="verifier_grounded_property_calculation" aria-label="Property Record IDs" placeholder="完整 ID 或三位题号；每行或中英文逗号分隔；留空全选"></textarea>
-                </label>
+                  <div class="record-selector-controls">
+                    <label class="record-id-field"><span class="field-label">直接输入 ID</span><textarea rows="2" data-record-dataset="verifier_grounded_property_calculation" aria-label="Property Record IDs" placeholder="完整 ID 或单个题号；每行或中英文逗号分隔；留空全选"></textarea></label>
+                    <div class="record-range">
+                      <span class="field-label">范围选择</span>
+                      <div class="record-range-inputs">
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="005" aria-label="Property 范围起始题号" autocomplete="off"></label>
+                        <span class="record-range-dash" aria-hidden="true">-</span>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="010" aria-label="Property 范围结束题号" autocomplete="off"></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <p class="record-selector-empty" id="recordSelectorEmpty" hidden>请先选择数据集</p>
               <div class="inline-fields">

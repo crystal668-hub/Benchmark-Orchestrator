@@ -205,6 +205,32 @@ function parseRecordIds(value) {
   return String(value || "").split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function expandRecordRange(startValue, endValue) {
+  const start = String(startValue || "").trim();
+  const end = String(endValue || "").trim();
+  if (!start && !end) return [];
+  if (!start || !end) throw new Error("范围选择需要同时填写起始和结束题号");
+  if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) throw new Error("范围题号只能包含数字");
+
+  const startNumber = Number(start);
+  const endNumber = Number(end);
+  if (!Number.isSafeInteger(startNumber) || !Number.isSafeInteger(endNumber)) throw new Error("范围题号过大");
+  if (startNumber > endNumber) throw new Error("范围起始题号不能大于结束题号");
+  if (endNumber - startNumber > 65535) throw new Error("范围最多支持 65536 道题");
+
+  const width = Math.max(start.length, end.length, 3);
+  return Array.from({ length: endNumber - startNumber + 1 }, (_, index) => String(startNumber + index).padStart(width, "0"));
+}
+
+function recordIdsForSelector(selector) {
+  const directIds = parseRecordIds(selector.querySelector("[data-record-dataset]")?.value);
+  const rangeIds = expandRecordRange(
+    selector.querySelector("[data-record-range-start]")?.value,
+    selector.querySelector("[data-record-range-end]")?.value,
+  );
+  return [...directIds, ...rangeIds];
+}
+
 function invalidatePreview() {
   if (!state.preview) return;
   state.preview = null;
@@ -449,9 +475,9 @@ function formSpec() {
   const form = new FormData($("#runForm"));
   const datasets = form.getAll("datasets");
   const recordIdsByDataset = Object.fromEntries(
-    [...document.querySelectorAll("[data-record-dataset]")]
-      .filter((input) => datasets.includes(input.dataset.recordDataset))
-      .map((input) => [input.dataset.recordDataset, parseRecordIds(input.value)])
+    [...document.querySelectorAll("[data-record-selector]")]
+      .filter((selector) => datasets.includes(selector.dataset.recordSelector))
+      .map((selector) => [selector.dataset.recordSelector, recordIdsForSelector(selector)])
   );
   const retries = Number(form.get("timeout_retries"));
   return {
