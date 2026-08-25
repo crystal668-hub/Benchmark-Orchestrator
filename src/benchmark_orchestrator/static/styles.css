@@ -144,6 +144,7 @@ body[data-resize-axis="y"].is-resizing, body[data-resize-axis="y"].is-resizing *
 .run-item small span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-state { padding: 3px 5px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--rail-muted); font: 700 8px/1 ui-monospace, monospace; text-transform: uppercase; flex: 0 0 auto; }
 .mini-state.running, .mini-state.completed { color: var(--success); border-color: color-mix(in srgb, var(--success) 58%, var(--line)); }
+.mini-state.recovered { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 58%, var(--line)); }
 .mini-state.failed, .mini-state.cancelled { color: #ff9073; border-color: #7b4437; }
 .empty-rail { color: var(--rail-muted); font-size: 13px; padding: 32px 18px; text-align: center; }
 
@@ -269,8 +270,11 @@ tr:last-child td { border-bottom: 0; }
 .back-link { border: 0; padding: 0 0 14px; display: flex; gap: 6px; align-items: center; background: transparent; color: var(--muted); font-size: 12px; }
 .back-link svg { width: 13px; }
 .run-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.state-stack { display: grid; justify-items: end; gap: 6px; }
+.state-stack small { color: var(--muted); font: 10px/1.2 ui-monospace, monospace; white-space: nowrap; }
 .state-badge { padding: 9px 11px; border: 1px solid var(--line); border-radius: 3px; font: 700 10px/1 ui-monospace, monospace; text-transform: uppercase; background: var(--surface-subtle); }
 .state-badge.running, .state-badge.completed { color: var(--success); background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 45%, var(--line)); }
+.state-badge.completed_with_recovery { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
 .state-badge.failed, .state-badge.cancelled, .state-badge.interrupted { color: var(--orange); background: var(--orange-soft); border-color: color-mix(in srgb, var(--orange) 45%, var(--line)); }
 .state-badge.cancelling { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
 .progress-band { min-height: 82px; display: grid; grid-template-columns: 155px minmax(100px, 1fr) 54px; gap: 18px; align-items: center; padding: 0 42px; background: var(--surface-subtle); border-bottom: 1px solid var(--line); }

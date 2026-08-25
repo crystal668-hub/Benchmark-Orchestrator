@@ -160,6 +160,13 @@ class ArtifactReader:
             committed, invalid = self.checkpoint_state(run_id)
         except (OSError, UnicodeError, json.JSONDecodeError, OrchestratorError):
             return False
+        selected = set(selected_pairs)
+        result_items = results.get("results", []) if isinstance(results, dict) else []
+        result_pairs = {
+            (item.get("group_id"), item.get("record_id"))
+            for item in result_items
+            if _valid_record(item)
+        }
         return (
             isinstance(results, dict)
             and results.get("schema_version") in (2, 3)
@@ -167,7 +174,8 @@ class ArtifactReader:
             and isinstance(progress, dict)
             and progress.get("status") == "completed"
             and not invalid
-            and set(selected_pairs).issubset(committed)
+            and selected.issubset(committed)
+            and selected.issubset(result_pairs)
         )
 
     def load_results(self, run_dir: Path) -> list[dict[str, Any]]:

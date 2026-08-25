@@ -8,9 +8,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=12">
+  <link rel="stylesheet" href="/styles.css?v=13">
   <script defer src="/lucide.min.js?v=0.468.0"></script>
-  <script defer src="/app.js?v=12"></script>
+  <script defer src="/app.js?v=13"></script>
 </head>
 <body>
   <header class="topbar">
@@ -203,7 +203,10 @@
             <code id="runPath"></code>
           </div>
           <div class="run-actions">
-            <span class="state-badge" id="runState">created</span>
+            <div class="state-stack">
+              <span class="state-badge" id="runState">created</span>
+              <small id="runStateDetail"></small>
+            </div>
             <button class="secondary-button danger" id="cancelButton" type="button" hidden><i data-lucide="square"></i>取消</button>
             <button class="primary-button" id="resumeButton" type="button" hidden><i data-lucide="rotate-ccw"></i>续跑缺失项</button>
           </div>

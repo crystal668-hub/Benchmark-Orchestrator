@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,19 @@ def test_malformed_results_falls_back_without_validating_final_artifacts(
 
     assert reader.load_results(run)[0]["record_id"] == "rdkit_qed_max_001"
     assert not reader.final_artifacts_valid(
+        "demo-run", [("single_llm_skills_on", "rdkit_qed_max_001")]
+    )
+
+
+def test_final_artifacts_require_selected_pairs_in_aggregate_results(
+    tmp_path: Path,
+) -> None:
+    run = demo_run(tmp_path)
+    payload = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    payload["results"] = []
+    write_json(run / "results.json", payload)
+
+    assert not ArtifactReader(tmp_path).final_artifacts_valid(
         "demo-run", [("single_llm_skills_on", "rdkit_qed_max_001")]
     )
 

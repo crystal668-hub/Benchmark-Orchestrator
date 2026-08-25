@@ -437,15 +437,27 @@ async function loadRuns() {
   } catch (error) { toast(error.message, true); }
 }
 
+function stateLabel(value) {
+  return {
+    completed_with_recovery: "completed · recovered",
+    artifact_completed_after_control_terminal: "artifact completed after control terminal",
+    artifact_completed_while_control_active: "artifact completed while control active",
+  }[value] || value || "history";
+}
+
+function stateClass(value) {
+  return value === "completed_with_recovery" ? "recovered" : value || "history";
+}
+
 function renderRunList() {
   const list = $("#runList");
   $("#emptyRail").hidden = state.runs.length > 0;
   list.innerHTML = state.runs.map((run) => {
-    const controlState = run.control?.state || run.status || "history";
+    const controlState = run.status_view?.effective_state || run.control?.state || run.status || "history";
     const completed = run.progress?.completed || 0;
     const total = run.progress?.total || (run.record_count || 0) * Math.max(run.group_count || 1, 1);
     return `<button class="run-item ${run.run_id === state.activeRunId ? "active" : ""}" data-run-id="${escapeHtml(run.run_id)}" type="button">
-      <span class="run-item-top"><strong>${escapeHtml(run.alias || run.run_id)}</strong><i class="mini-state ${escapeHtml(controlState)}">${escapeHtml(controlState)}</i></span>
+      <span class="run-item-top"><strong>${escapeHtml(run.alias || run.run_id)}</strong><i class="mini-state ${escapeHtml(stateClass(controlState))}">${escapeHtml(stateLabel(controlState))}</i></span>
       <small><span>${escapeHtml((run.datasets || []).map((item) => item.replace("verifier_grounded_", "")).join(" · ") || "artifact run")}</span><span>${completed}/${total}</span></small>
     </button>`;
   }).join("");
@@ -570,12 +582,19 @@ async function refreshRun() {
 
 function renderRun(run, control, tasks) {
   const frozen = run.frozen;
+  const statusView = run.status_view || control?.status_view || {};
   $("#runTitle").textContent = run.metadata?.alias || run.run_id;
   $("#runPath").textContent = run.path;
   $("#runCategory").textContent = frozen ? `${frozen.run_category.toUpperCase()} · ${frozen.spec.datasets.map((item) => item.replace("verifier_grounded_", "")).join(" + ")}` : "HISTORICAL ARTIFACT RUN";
-  const status = control?.state || run.progress?.status || "history";
-  $("#runState").textContent = status;
+  const status = statusView.effective_state || control?.state || run.progress?.status || "history";
+  $("#runState").textContent = stateLabel(status);
   $("#runState").className = `state-badge ${status}`;
+  const controlState = statusView.control_state || control?.state;
+  const artifactState = statusView.artifact_state;
+  $("#runStateDetail").textContent = controlState && artifactState
+    ? `Control: ${stateLabel(controlState)} · Artifact: ${stateLabel(artifactState)}`
+    : artifactState ? `Artifact: ${stateLabel(artifactState)}` : "";
+  $("#runStateDetail").hidden = !$("#runStateDetail").textContent;
   $("#cancelButton").hidden = !control?.can_cancel;
   $("#resumeButton").hidden = !control?.can_resume;
   const completed = control?.committed_count ?? run.progress?.completed ?? 0;

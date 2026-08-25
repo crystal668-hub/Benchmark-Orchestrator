@@ -44,6 +44,75 @@ class RunService:
     async def capabilities(self) -> dict[str, Any]:
         return await self.adapter.inspect_capabilities()
 
+    def _artifact_status(self, run_id: str, frozen: FrozenRun) -> dict[str, Any]:
+        committed, invalid = self.artifacts.checkpoint_state_at(frozen.output_dir)
+        selected = set(frozen.selected_pairs)
+        committed_count = len(selected & set(committed))
+        try:
+            progress = self.artifacts.progress(
+                run_id, expected_pairs=frozen.selected_pairs
+            )
+        except OrchestratorError:
+            progress = {}
+        final_valid = self.artifacts.final_artifacts_valid(
+            run_id, frozen.selected_pairs
+        )
+        if final_valid:
+            state = "completed"
+        elif invalid:
+            state = "invalid"
+        elif committed_count:
+            state = "partial"
+        elif progress.get("status") in ACTIVE_STATES:
+            state = "running"
+        else:
+            state = "pending"
+        return {
+            "state": state,
+            "progress_status": progress.get("status"),
+            "selected_count": len(selected),
+            "committed_count": committed_count,
+            "missing_count": len(selected - set(committed)),
+            "invalid_checkpoints": invalid,
+        }
+
+    @staticmethod
+    def _status_view(
+        control_state: str | None, artifact_state: str
+    ) -> dict[str, str | None]:
+        if control_state is None:
+            return {
+                "control_state": None,
+                "artifact_state": artifact_state,
+                "effective_state": artifact_state,
+                "consistency": "artifact_only",
+            }
+        if artifact_state == "completed" and control_state != "completed":
+            consistency = (
+                "artifact_completed_while_control_active"
+                if control_state in ACTIVE_STATES
+                else "artifact_completed_after_control_terminal"
+            )
+            return {
+                "control_state": control_state,
+                "artifact_state": artifact_state,
+                "effective_state": "completed_with_recovery",
+                "consistency": consistency,
+            }
+        if control_state == "completed" and artifact_state != "completed":
+            return {
+                "control_state": control_state,
+                "artifact_state": artifact_state,
+                "effective_state": "completed",
+                "consistency": "control_completed_artifact_incomplete",
+            }
+        return {
+            "control_state": control_state,
+            "artifact_state": artifact_state,
+            "effective_state": control_state,
+            "consistency": "consistent",
+        }
+
     async def _ensure_runtime_ready(self) -> None:
         capabilities = await self.adapter.inspect_capabilities()
         if capabilities["ready"]:
@@ -273,19 +342,20 @@ class RunService:
     async def control(self, run_id: str) -> dict[str, Any]:
         frozen = self.registry.load_frozen(run_id)
         control = await self.supervisor.reconcile(run_id)
-        committed, invalid = self.artifacts.checkpoint_state_at(frozen.output_dir)
-        missing = set(frozen.selected_pairs) - set(committed)
+        artifact = self._artifact_status(run_id, frozen)
         return {
             **control.model_dump(mode="json"),
-            "selected_count": len(frozen.selected_pairs),
-            "committed_count": len(set(frozen.selected_pairs) & set(committed)),
-            "missing_count": len(missing),
-            "invalid_checkpoints": invalid,
+            "artifact": artifact,
+            "status_view": self._status_view(control.state, artifact["state"]),
+            "selected_count": artifact["selected_count"],
+            "committed_count": artifact["committed_count"],
+            "missing_count": artifact["missing_count"],
+            "invalid_checkpoints": artifact["invalid_checkpoints"],
             "can_cancel": control.state in {"starting", "running"}
             and bool(control.active_invocation_id),
             "can_resume": control.state in {"failed", "cancelled", "interrupted"}
-            and bool(missing)
-            and not invalid,
+            and bool(artifact["missing_count"])
+            and not artifact["invalid_checkpoints"],
         }
 
     async def list_runs(self, *, include_hidden: bool = False) -> list[dict[str, Any]]:
@@ -319,16 +389,25 @@ class RunService:
                 entry["progress"] = self.artifacts.progress(
                     run_id, expected_pairs=frozen.selected_pairs
                 )
+            artifact = self._artifact_status(run_id, frozen)
             entry["control"] = {
                 "state": control.state,
                 "active_invocation_id": control.active_invocation_id,
             }
+            entry["status_view"] = self._status_view(control.state, artifact["state"])
             entry["created_at"] = frozen.created_at
         rows: list[dict[str, Any]] = []
         for entry in artifact_runs.values():
             metadata = self.annotations.metadata(entry["run_id"])
             if metadata.get("hidden") and not include_hidden:
                 continue
+            if "status_view" not in entry:
+                artifact_state = (
+                    "completed"
+                    if entry.get("status") == "completed"
+                    else entry.get("progress", {}).get("status") or "pending"
+                )
+                entry["status_view"] = self._status_view(None, artifact_state)
             rows.append({**entry, **metadata})
         return sorted(
             rows,
@@ -369,6 +448,14 @@ class RunService:
         snapshot["control"] = control.model_dump(mode="json") if control else None
         snapshot["frozen"] = frozen.model_dump(mode="json") if frozen else None
         snapshot["metadata"] = self.annotations.metadata(run_id)
+        if frozen is not None:
+            artifact = self._artifact_status(run_id, frozen)
+            snapshot["status_view"] = self._status_view(
+                control.state if control else None, artifact["state"]
+            )
+        else:
+            artifact_state = snapshot["progress"].get("status") or "pending"
+            snapshot["status_view"] = self._status_view(None, artifact_state)
         return snapshot
 
     def tasks(self, run_id: str) -> list[dict[str, Any]]:

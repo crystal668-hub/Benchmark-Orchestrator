@@ -26,9 +26,9 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=12">' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=13">' in index.text
     assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
-    assert '<script defer src="/app.js?v=12"></script>' in index.text
+    assert '<script defer src="/app.js?v=13"></script>' in index.text
     assert "https://unpkg.com" not in index.text
     assert lucide.status_code == 200
     assert "lucide v0.468.0" in lucide.text
@@ -287,6 +287,46 @@ def test_historical_run_without_control_sidecar_exposes_tasks(
     assert tasks.json()[0]["checkpoint"] == "committed"
     assert tasks.json()[0]["result"]["evaluation"]["passed"] is None
     assert snapshot.json()["control"] is None
+
+
+def test_terminal_control_and_later_completed_artifacts_are_reported_separately(
+    config: OrchestratorConfig,
+) -> None:
+    run = config.run_root / "formal/verifier-grounded-rdkit/model/recovered-run"
+    payload = result("single_llm_skills_on", "rdkit_qed_max_001")
+    write_json(run / "per-record/single_llm_skills_on/record.json", payload)
+    write_json(
+        run / "results.json",
+        {"schema_version": 3, "records": 1, "results": [payload], "groups": []},
+    )
+    write_json(
+        run / "progress/state.json",
+        {"status": "completed", "total": 1, "completed": 1, "groups": {}},
+    )
+    app = build_app(config)
+    frozen = seed_controlled_run(
+        app.state.service.registry, run, run_id="recovered-run"
+    )
+    control = app.state.service.registry.load_control(frozen.run_id).model_copy(
+        update={"state": "failed"}
+    )
+    app.state.service.registry.save_control(control)
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        snapshot = client.get("/api/runs/recovered-run")
+        control_snapshot = client.get("/api/runs/recovered-run/control")
+
+    assert snapshot.status_code == 200
+    assert snapshot.json()["control"]["state"] == "failed"
+    assert snapshot.json()["status_view"] == {
+        "control_state": "failed",
+        "artifact_state": "completed",
+        "effective_state": "completed_with_recovery",
+        "consistency": "artifact_completed_after_control_terminal",
+    }
+    assert control_snapshot.json()["committed_count"] == 1
+    assert control_snapshot.json()["missing_count"] == 0
+    assert control_snapshot.json()["can_resume"] is False
 
 
 def test_deleted_completed_run_is_removed_from_run_list(
