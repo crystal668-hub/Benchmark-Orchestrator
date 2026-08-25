@@ -15,6 +15,7 @@ from .models import (
     FrozenRun,
     OrchestratorError,
     RunSpec,
+    RecordRange,
     RuntimeCommand,
     SelectionSpec,
     SelectedRecord,
@@ -365,6 +366,26 @@ class CanonicalCliRuntimeAdapter:
             selected.append(record)
         return selected
 
+    @staticmethod
+    def _select_dataset_record_range(
+        records: Sequence[SelectedRecord], record_range: RecordRange, dataset: str
+    ) -> list[SelectedRecord]:
+        start = int(record_range.start)
+        end = int(record_range.end)
+        selected = [
+            record
+            for record in records
+            if (suffix := record.record_id.rsplit("_", 1)[-1]).isdecimal()
+            and start <= int(suffix) <= end
+        ]
+        if not selected:
+            raise OrchestratorError(
+                "selection_invalid",
+                f"No records found in range {record_range.start}-{record_range.end} in {dataset}",
+                status_code=422,
+            )
+        return selected
+
     def output_location(
         self, spec: RunSpec, timestamp: str
     ) -> tuple[str, str, str, Path]:
@@ -380,7 +401,10 @@ class CanonicalCliRuntimeAdapter:
 
     def build_run_command(self, frozen: FrozenRun, *, resume: bool) -> RuntimeCommand:
         spec = frozen.spec
-        if spec.selection.record_ids_by_dataset:
+        if (
+            spec.selection.record_ids_by_dataset
+            or spec.selection.record_ranges_by_dataset
+        ):
             argv = self._selector_argv(
                 spec,
                 record_ids=[record.record_id for record in frozen.selected_records],
@@ -415,7 +439,10 @@ class CanonicalCliRuntimeAdapter:
     async def execute_preview(
         self, spec: RunSpec, *, timeout_seconds: float = 120
     ) -> list[SelectedRecord]:
-        if not spec.selection.record_ids_by_dataset:
+        if not (
+            spec.selection.record_ids_by_dataset
+            or spec.selection.record_ranges_by_dataset
+        ):
             return await self._execute_preview(spec, timeout_seconds=timeout_seconds)
 
         records: list[SelectedRecord] = []
@@ -429,13 +456,31 @@ class CanonicalCliRuntimeAdapter:
             available_records = await self._execute_preview(
                 dataset_spec, timeout_seconds=timeout_seconds
             )
-            records.extend(
-                self._select_dataset_records(
-                    available_records,
-                    spec.selection.record_ids_by_dataset.get(dataset, []),
-                    dataset,
+            selected: list[SelectedRecord] = []
+            direct_ids = spec.selection.record_ids_by_dataset.get(dataset, [])
+            if direct_ids:
+                selected.extend(
+                    self._select_dataset_records(available_records, direct_ids, dataset)
                 )
-            )
+            record_range = spec.selection.record_ranges_by_dataset.get(dataset)
+            if record_range:
+                selected.extend(
+                    self._select_dataset_record_range(
+                        available_records, record_range, dataset
+                    )
+                )
+            if not direct_ids and not record_range:
+                selected = list(available_records)
+            selected_ids = {record.record_id for record in records}
+            for record in selected:
+                if record.record_id in selected_ids:
+                    raise OrchestratorError(
+                        "selection_invalid",
+                        f"Record selection contains duplicate id {record.record_id!r}",
+                        status_code=422,
+                    )
+                selected_ids.add(record.record_id)
+                records.append(record)
 
         duplicate_ids = sorted(
             record_id

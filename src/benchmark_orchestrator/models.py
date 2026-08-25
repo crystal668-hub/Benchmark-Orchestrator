@@ -27,6 +27,7 @@ ControlState = Literal[
 ACTIVE_STATES = {"starting", "running", "cancelling"}
 TERMINAL_STATES = {"completed", "failed", "cancelled", "interrupted"}
 _RECORD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
+_RECORD_NUMBER = re.compile(r"^\d+$")
 
 
 def utc_now() -> str:
@@ -62,9 +63,28 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RecordRange(StrictModel):
+    start: str
+    end: str
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_number(cls, value: str) -> str:
+        if not _RECORD_NUMBER.fullmatch(value):
+            raise ValueError("record range values must contain only digits")
+        return value
+
+    @model_validator(mode="after")
+    def validate_order(self) -> RecordRange:
+        if int(self.start) > int(self.end):
+            raise ValueError("record range start must not exceed end")
+        return self
+
+
 class SelectionSpec(StrictModel):
     record_ids: list[str] = Field(default_factory=list)
     record_ids_by_dataset: dict[DatasetId, list[str]] = Field(default_factory=dict)
+    record_ranges_by_dataset: dict[DatasetId, RecordRange] = Field(default_factory=dict)
     offset: int = Field(default=0, ge=0)
     limit: int | None = Field(default=None, ge=1)
 
@@ -102,9 +122,11 @@ class SelectionSpec(StrictModel):
 
     @model_validator(mode="after")
     def reject_mixed_record_id_formats(self) -> SelectionSpec:
-        if self.record_ids and self.record_ids_by_dataset:
+        if self.record_ids and (
+            self.record_ids_by_dataset or self.record_ranges_by_dataset
+        ):
             raise ValueError(
-                "record_ids and record_ids_by_dataset must not be used together"
+                "record_ids and dataset-specific record selection must not be used together"
             )
         return self
 
@@ -173,7 +195,10 @@ class RunSpec(StrictModel):
 
     @model_validator(mode="after")
     def validate_selection_datasets(self) -> RunSpec:
-        unknown = set(self.selection.record_ids_by_dataset) - set(self.datasets)
+        selected_dataset_ids = set(self.selection.record_ids_by_dataset) | set(
+            self.selection.record_ranges_by_dataset
+        )
+        unknown = selected_dataset_ids - set(self.datasets)
         if unknown:
             raise ValueError(
                 "record selection includes unselected dataset(s): "

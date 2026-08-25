@@ -205,30 +205,14 @@ function parseRecordIds(value) {
   return String(value || "").split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean);
 }
 
-function expandRecordRange(startValue, endValue) {
+function parseRecordRange(startValue, endValue) {
   const start = String(startValue || "").trim();
   const end = String(endValue || "").trim();
-  if (!start && !end) return [];
+  if (!start && !end) return null;
   if (!start || !end) throw new Error("范围选择需要同时填写起始和结束题号");
   if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) throw new Error("范围题号只能包含数字");
-
-  const startNumber = BigInt(start);
-  const endNumber = BigInt(end);
-  const count = endNumber - startNumber + 1n;
-  if (count <= 0n) throw new Error("范围起始题号不能大于结束题号");
-  if (count > 65536n) throw new Error("范围最多支持 65536 道题");
-
-  const width = Math.max(start.length, end.length, 3);
-  return Array.from({ length: Number(count) }, (_, index) => (startNumber + BigInt(index)).toString().padStart(width, "0"));
-}
-
-function recordIdsForSelector(selector) {
-  const directIds = parseRecordIds(selector.querySelector("[data-record-dataset]")?.value);
-  const rangeIds = expandRecordRange(
-    selector.querySelector("[data-record-range-start]")?.value,
-    selector.querySelector("[data-record-range-end]")?.value,
-  );
-  return [...directIds, ...rangeIds];
+  if (BigInt(start) > BigInt(end)) throw new Error("范围起始题号不能大于结束题号");
+  return { start, end };
 }
 
 function invalidatePreview() {
@@ -474,10 +458,22 @@ function renderRunList() {
 function formSpec() {
   const form = new FormData($("#runForm"));
   const datasets = form.getAll("datasets");
+  const selectors = [...document.querySelectorAll("[data-record-selector]")]
+    .filter((selector) => datasets.includes(selector.dataset.recordSelector));
   const recordIdsByDataset = Object.fromEntries(
-    [...document.querySelectorAll("[data-record-selector]")]
-      .filter((selector) => datasets.includes(selector.dataset.recordSelector))
-      .map((selector) => [selector.dataset.recordSelector, recordIdsForSelector(selector)])
+    selectors.map((selector) => [
+      selector.dataset.recordSelector,
+      parseRecordIds(selector.querySelector("[data-record-dataset]")?.value),
+    ])
+  );
+  const recordRangesByDataset = Object.fromEntries(
+    selectors.flatMap((selector) => {
+      const range = parseRecordRange(
+        selector.querySelector("[data-record-range-start]")?.value,
+        selector.querySelector("[data-record-range-end]")?.value,
+      );
+      return range ? [[selector.dataset.recordSelector, range]] : [];
+    })
   );
   const retries = Number(form.get("timeout_retries"));
   return {
@@ -485,7 +481,7 @@ function formSpec() {
     name: null,
     groups: form.getAll("groups"),
     datasets,
-    selection: { record_ids_by_dataset: recordIdsByDataset, offset: Number(form.get("offset") || 0), limit: form.get("limit") ? Number(form.get("limit")) : null },
+    selection: { record_ids_by_dataset: recordIdsByDataset, record_ranges_by_dataset: recordRangesByDataset, offset: Number(form.get("offset") || 0), limit: form.get("limit") ? Number(form.get("limit")) : null },
     agent: { model: String(form.get("model") || "").trim(), thinking: form.get("thinking") },
     execution: {
       timeout_seconds: form.get("no_timeout") ? null : Number(form.get("timeout_seconds")),

@@ -26,9 +26,9 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=11">' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=12">' in index.text
     assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
-    assert '<script defer src="/app.js?v=11"></script>' in index.text
+    assert '<script defer src="/app.js?v=12"></script>' in index.text
     assert "https://unpkg.com" not in index.text
     assert lucide.status_code == 200
     assert "lucide v0.468.0" in lucide.text
@@ -156,6 +156,51 @@ def test_preview_accepts_record_ids_grouped_by_dataset(
         "verifier_grounded_rdkit": ["rdkit_qed_max_001"],
         "verifier_grounded_xtb_xyz": ["xtb_gap_window_001"],
     }
+
+
+def test_preview_accepts_record_ranges_by_dataset(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    app.state.service.adapter.inspect_capabilities = AsyncMock(
+        return_value={"ready": True, "checks": []}
+    )
+    app.state.service.adapter.execute_preview = AsyncMock(
+        return_value=[
+            SelectedRecord(
+                record_id="rdkit_task_005",
+                dataset="verifier_grounded_rdkit",
+            )
+        ]
+    )
+    app.state.service.adapter.runtime_revision = AsyncMock(
+        return_value=("revision", False)
+    )
+    app.state.service.adapter.release_identity = lambda: {
+        "version": "0.5.0",
+        "wheel_sha256": "a" * 64,
+        "datasets": [],
+    }
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.post(
+            "/api/runs/preview",
+            json={
+                "groups": ["single_llm_skills_on"],
+                "datasets": ["verifier_grounded_rdkit"],
+                "selection": {
+                    "record_ranges_by_dataset": {
+                        "verifier_grounded_rdkit": {"start": "002", "end": "012"}
+                    }
+                },
+                "agent": {"model": "openai/gpt-5.5", "thinking": "high"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["normalized_spec"]["selection"][
+        "record_ranges_by_dataset"
+    ] == {"verifier_grounded_rdkit": {"start": "002", "end": "012"}}
 
 
 def test_create_rejects_failed_runtime_preflight(

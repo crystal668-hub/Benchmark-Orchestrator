@@ -28,6 +28,14 @@ def test_run_spec_rejects_extra_duplicates_and_unsafe_ids() -> None:
                 },
             }
         )
+    with pytest.raises(ValidationError, match="record range"):
+        make_spec(
+            selection={
+                "record_ranges_by_dataset": {
+                    "verifier_grounded_rdkit": {"start": "012", "end": "002"}
+                }
+            }
+        )
     with pytest.raises(ValidationError, match="unselected dataset"):
         make_spec(
             selection={
@@ -227,6 +235,44 @@ async def test_dataset_record_selection_resolves_each_dataset_before_windowing(
     assert command.argv[record_flag + 1] == "xtb_gap_window_001"
     assert "--offset" not in command.argv
     assert "--limit" not in command.argv
+
+
+@pytest.mark.asyncio
+async def test_dataset_record_range_selects_existing_records_with_gaps(
+    config: OrchestratorConfig,
+) -> None:
+    spec = make_spec(
+        selection={
+            "record_ranges_by_dataset": {
+                "verifier_grounded_rdkit": {"start": "002", "end": "012"}
+            }
+        }
+    )
+    adapter = adapter_for(config)
+    adapter._execute_preview = AsyncMock(
+        return_value=[
+            SelectedRecord(
+                record_id=f"rdkit_task_{number:03d}",
+                dataset="verifier_grounded_rdkit",
+            )
+            for number in [1, 5, 6, 7, 8, 9, 10, 14]
+        ]
+    )
+
+    records = await adapter.execute_preview(spec)
+
+    assert [record.record_id for record in records] == [
+        "rdkit_task_005",
+        "rdkit_task_006",
+        "rdkit_task_007",
+        "rdkit_task_008",
+        "rdkit_task_009",
+        "rdkit_task_010",
+    ]
+    frozen = frozen_for(config, spec).model_copy(update={"selected_records": records})
+    command = adapter.build_run_command(frozen, resume=False)
+    record_flag = command.argv.index("--record-ids")
+    assert command.argv[record_flag + 1] == ",".join(record.record_id for record in records)
 
 
 def test_dataset_record_selection_accepts_numeric_record_suffixes(
