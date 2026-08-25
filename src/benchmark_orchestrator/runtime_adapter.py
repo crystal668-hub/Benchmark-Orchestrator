@@ -44,6 +44,7 @@ REQUIRED_CLI_FLAGS = (
     "--exact-output-dir",
     "--merge-existing-per-record",
 )
+_RECORD_NUMBER = re.compile(r"(?<!\d)(\d{3})(?!\d)")
 
 
 def canonical_json(value: Any) -> str:
@@ -375,8 +376,10 @@ class CanonicalCliRuntimeAdapter:
         selected = [
             record
             for record in records
-            if (suffix := record.record_id.rsplit("_", 1)[-1]).isdecimal()
-            and start <= int(suffix) <= end
+            if any(
+                start <= int(number) <= end
+                for number in _RECORD_NUMBER.findall(record.record_id)
+            )
         ]
         if not selected:
             raise OrchestratorError(

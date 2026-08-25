@@ -275,6 +275,75 @@ async def test_dataset_record_range_selects_existing_records_with_gaps(
     assert command.argv[record_flag + 1] == ",".join(record.record_id for record in records)
 
 
+@pytest.mark.asyncio
+async def test_dataset_record_range_matches_numbers_inside_record_ids(
+    config: OrchestratorConfig,
+) -> None:
+    spec = make_spec(
+        datasets=["verifier_grounded_property_calculation"],
+        selection={
+            "record_ranges_by_dataset": {
+                "verifier_grounded_property_calculation": {
+                    "start": "015",
+                    "end": "020",
+                }
+            }
+        },
+    )
+    adapter = adapter_for(config)
+    adapter._execute_preview = AsyncMock(
+        return_value=[
+            SelectedRecord(
+                record_id=f"property_calc_{number:03d}_task",
+                dataset="verifier_grounded_property_calculation",
+            )
+            for number in [14, 15, 16, 17, 18, 19, 20, 21]
+        ]
+    )
+
+    records = await adapter.execute_preview(spec)
+
+    assert [record.record_id for record in records] == [
+        "property_calc_015_task",
+        "property_calc_016_task",
+        "property_calc_017_task",
+        "property_calc_018_task",
+        "property_calc_019_task",
+        "property_calc_020_task",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dataset_record_range_ignores_non_task_numbers_in_record_ids(
+    config: OrchestratorConfig,
+) -> None:
+    spec = make_spec(
+        datasets=["verifier_grounded_xtb_xyz"],
+        selection={
+            "record_ranges_by_dataset": {
+                "verifier_grounded_xtb_xyz": {"start": "002", "end": "012"}
+            }
+        },
+    )
+    adapter = adapter_for(config)
+    adapter._execute_preview = AsyncMock(
+        return_value=[
+            SelectedRecord(
+                record_id="xtb_c10_f2_gap_min_016",
+                dataset="verifier_grounded_xtb_xyz",
+            ),
+            SelectedRecord(
+                record_id="xtb_dipole_window_002",
+                dataset="verifier_grounded_xtb_xyz",
+            ),
+        ]
+    )
+
+    records = await adapter.execute_preview(spec)
+
+    assert [record.record_id for record in records] == ["xtb_dipole_window_002"]
+
+
 def test_dataset_record_selection_accepts_numeric_record_suffixes(
     config: OrchestratorConfig,
 ) -> None:
