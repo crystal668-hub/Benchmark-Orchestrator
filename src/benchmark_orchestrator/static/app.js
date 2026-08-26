@@ -623,9 +623,10 @@ function resultCell(task) {
   const evaluation = result.evaluation || {};
   const score = evaluation.normalized_score ?? evaluation.score;
   const formattedScore = score == null || !Number.isFinite(Number(score)) ? "—" : Number(score).toFixed(4);
+  const recordStatus = task.record_status || "—";
   return `<td class="result-cell">
     <div class="result-cell-top"><span class="checkpoint ${escapeHtml(task.checkpoint)}">${escapeHtml(task.checkpoint)}</span><strong>${formattedScore}</strong></div>
-    <dl><div><dt>Lifecycle</dt><dd>${escapeHtml(result.run_lifecycle_status || "—")}</dd></div><div><dt>Answer</dt><dd>${escapeHtml(result.answer_availability || "—")}</dd></div></dl>
+    <dl><div><dt>Lifecycle</dt><dd>${escapeHtml(recordStatus)}</dd></div><div><dt>Answer</dt><dd>${escapeHtml(result.answer_availability || "—")}</dd></div></dl>
   </td>`;
 }
 

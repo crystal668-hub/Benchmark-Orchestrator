@@ -113,6 +113,13 @@ class RunService:
             "consistency": "consistent",
         }
 
+    @staticmethod
+    def _record_status(result: dict[str, Any]) -> str | None:
+        if result.get("scored") is True:
+            return "completed"
+        lifecycle = result.get("run_lifecycle_status")
+        return lifecycle if isinstance(lifecycle, str) else None
+
     async def _ensure_runtime_ready(self) -> None:
         capabilities = await self.adapter.inspect_capabilities()
         if capabilities["ready"]:
@@ -471,6 +478,7 @@ class RunService:
                     "record_id": result["record_id"],
                     "selected": True,
                     "checkpoint": "committed",
+                    "record_status": self._record_status(result),
                     "result": result,
                 }
                 for result in self.artifacts.load_results(run_dir)
@@ -491,6 +499,9 @@ class RunService:
                 else "invalid"
                 if (group_id, record_id.replace("_", "-")) in invalid_pairs
                 else "missing",
+                "record_status": self._record_status(result)
+                if (result := committed.get((group_id, record_id)))
+                else None,
                 "result": committed.get((group_id, record_id)),
             }
             for group_id, record_id in frozen.selected_pairs

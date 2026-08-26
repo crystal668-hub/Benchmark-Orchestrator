@@ -329,6 +329,30 @@ def test_terminal_control_and_later_completed_artifacts_are_reported_separately(
     assert control_snapshot.json()["can_resume"] is False
 
 
+def test_scored_record_gets_completed_display_status(
+    config: OrchestratorConfig,
+) -> None:
+    run = config.run_root / "formal/verifier-grounded-rdkit/model/recovered-record"
+    payload = result("single_llm_skills_on", "rdkit_qed_max_001")
+    payload.update(
+        {
+            "run_lifecycle_status": "failed",
+            "answer_availability": "recovered_candidate",
+        }
+    )
+    write_json(run / "per-record/single_llm_skills_on/record.json", payload)
+
+    app = build_app(config)
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        task_response = client.get("/api/runs/recovered-record/tasks")
+
+    assert task_response.status_code == 200
+    task = task_response.json()[0]
+    assert task["record_status"] == "completed"
+    assert task["result"]["run_lifecycle_status"] == "failed"
+    assert task["result"]["scored"] is True
+
+
 def test_deleted_completed_run_is_removed_from_run_list(
     config: OrchestratorConfig,
 ) -> None:
