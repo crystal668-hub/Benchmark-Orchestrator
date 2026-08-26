@@ -54,6 +54,12 @@ def test_run_spec_rejects_extra_duplicates_and_unsafe_ids() -> None:
         )
 
 
+def test_run_spec_accepts_vgb_070_easy_property_dataset() -> None:
+    spec = make_spec(datasets=["verifier_grounded_property_calculation_easy"])
+
+    assert spec.datasets == ["verifier_grounded_property_calculation_easy"]
+
+
 def test_run_spec_requires_enough_finite_backoff_values() -> None:
     with pytest.raises(ValidationError, match="at least timeout_retries"):
         make_spec(
@@ -126,7 +132,7 @@ def frozen_for(config: OrchestratorConfig, spec: RunSpec) -> FrozenRun:
         spec_sha256="a" * 64,
         selected_records=[],
         selected_pairs=[],
-        vgb_release_version="0.5.0",
+        vgb_release_version="0.7.0",
         vgb_wheel_sha256="b" * 64,
         created_at="2026-07-21T00:00:00Z",
     )
