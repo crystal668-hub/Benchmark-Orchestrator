@@ -28,7 +28,7 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.json()["error"]["request_id"]
     assert '<link rel="stylesheet" href="/styles.css?v=13">' in index.text
     assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
-    assert '<script defer src="/app.js?v=13"></script>' in index.text
+    assert '<script defer src="/app.js?v=14"></script>' in index.text
     assert "https://unpkg.com" not in index.text
     assert lucide.status_code == 200
     assert "lucide v0.468.0" in lucide.text
