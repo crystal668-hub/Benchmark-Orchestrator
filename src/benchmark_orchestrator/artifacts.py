@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,9 @@ ALLOWED_ASSET_ROOTS = {
     "agent-workspace-quarantine",
 }
 IGNORED_RUN_TREE_NAMES = {"legacy-workspace-archives"}
+RUN_ID_TIMESTAMP = re.compile(
+    r"(?P<date>\d{8})(?P<separator>-|T)(?P<time>\d{6})(?P<utc>Z)?$"
+)
 
 
 def _load_json(path: Path) -> Any:
@@ -110,6 +115,26 @@ class ArtifactReader:
     def _result_files(run_dir: Path) -> Iterable[Path]:
         per_record = run_dir / "per-record"
         return sorted(per_record.glob("*/*.json")) if per_record.is_dir() else []
+
+    @staticmethod
+    def _created_at(run_dir: Path, payload: dict[str, Any]) -> str | None:
+        value = payload.get("created_at")
+        if isinstance(value, str) and value:
+            return value
+        match = RUN_ID_TIMESTAMP.search(run_dir.name)
+        if match is None:
+            return None
+        try:
+            parsed = datetime.strptime(
+                f"{match.group('date')}{match.group('time')}", "%Y%m%d%H%M%S"
+            )
+        except ValueError:
+            return None
+        if match.group("utc"):
+            parsed = parsed.replace(tzinfo=UTC)
+        else:
+            parsed = parsed.astimezone(UTC)
+        return parsed.isoformat(timespec="seconds").replace("+00:00", "Z")
 
     def checkpoint_state(
         self, run_id: str
@@ -273,6 +298,7 @@ class ArtifactReader:
                 {
                     "run_id": run_dir.name,
                     "path": str(run_dir),
+                    "created_at": self._created_at(run_dir, payload),
                     "generated_at": payload.get("generated_at"),
                     "status": "completed"
                     if (run_dir / "results.json").is_file()

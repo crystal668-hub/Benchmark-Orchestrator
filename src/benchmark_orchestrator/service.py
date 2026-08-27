@@ -418,7 +418,7 @@ class RunService:
             rows.append({**entry, **metadata})
         return sorted(
             rows,
-            key=lambda item: item.get("updated_at") or item.get("created_at") or "",
+            key=lambda item: item.get("created_at") or "",
             reverse=True,
         )
 
