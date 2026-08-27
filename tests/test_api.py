@@ -295,6 +295,29 @@ def test_historical_run_without_control_sidecar_exposes_tasks(
     assert snapshot.json()["control"] is None
 
 
+def test_run_list_orders_artifact_runs_by_created_at(
+    config: OrchestratorConfig,
+) -> None:
+    older_run = "verifier-grounded-rdkit-model-20260826-220416"
+    newer_run = "verifier-grounded-rdkit-model-20260827-004518"
+    for run_id in (older_run, newer_run):
+        run = config.run_root / f"formal/verifier-grounded-rdkit/model/{run_id}"
+        payload = result("single_llm_skills_on", "rdkit_qed_max_001")
+        write_json(run / "per-record/single_llm_skills_on/record.json", payload)
+        write_json(
+            run / "results.json",
+            {"schema_version": 3, "records": 1, "results": [payload], "groups": []},
+        )
+
+    app = build_app(config)
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    assert [item["run_id"] for item in response.json()] == [newer_run, older_run]
+    assert response.json()[0]["created_at"] == "2026-08-26T16:45:18Z"
+
+
 def test_terminal_control_and_later_completed_artifacts_are_reported_separately(
     config: OrchestratorConfig,
 ) -> None:
