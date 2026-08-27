@@ -12,6 +12,7 @@ DatasetId = Literal[
     "verifier_grounded_rdkit",
     "verifier_grounded_xtb_xyz",
     "verifier_grounded_property_calculation",
+    "verifier_grounded_property_calculation_easy",
 ]
 ThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh"]
 ControlState = Literal[

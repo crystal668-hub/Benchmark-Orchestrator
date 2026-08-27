@@ -53,7 +53,7 @@ def seed_controlled_run(
         selected_records=selected,
         selected_pairs=[("single_llm_skills_on", item) for item in records],
         runtime_revision="revision",
-        vgb_release_version="0.5.0",
+        vgb_release_version="0.7.0",
         vgb_wheel_sha256="a" * 64,
         created_at=utc_now(),
     )
@@ -67,7 +67,7 @@ def seed_controlled_run(
         execution_count=len(records),
         runtime_revision="revision",
         runtime_dirty=False,
-        vgb_release_version="0.5.0",
+        vgb_release_version="0.7.0",
         vgb_wheel_sha256="a" * 64,
         created_at=utc_now(),
         expires_at="2099-01-01T00:00:00Z",

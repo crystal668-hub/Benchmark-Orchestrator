@@ -26,7 +26,7 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert invalid.status_code == 422
     assert invalid.json()["error"]["code"] == "invalid_request"
     assert invalid.json()["error"]["request_id"]
-    assert '<link rel="stylesheet" href="/styles.css?v=13">' in index.text
+    assert '<link rel="stylesheet" href="/styles.css?v=14">' in index.text
     assert '<script defer src="/lucide.min.js?v=0.468.0"></script>' in index.text
     assert '<script defer src="/app.js?v=14"></script>' in index.text
     assert "https://unpkg.com" not in index.text
@@ -40,12 +40,18 @@ def test_health_static_and_structured_validation(config: OrchestratorConfig) -> 
     assert 'id="previewButton" type="submit"' in index.text
     assert 'id="startButton" type="button"' in index.text
     assert 'id="count-xtb_xyz">20</b>' in index.text
+    assert 'id="count-rdkit">14</b>' in index.text
+    assert 'id="count-property_calculation">20</b>' in index.text
+    assert 'id="count-property_calculation_easy">51</b>' in index.text
     assert 'data-record-dataset="verifier_grounded_rdkit"' in index.text
     assert 'data-record-dataset="verifier_grounded_xtb_xyz"' in index.text
     assert 'data-record-range-start="verifier_grounded_rdkit"' in index.text
     assert 'data-record-range-end="verifier_grounded_rdkit"' in index.text
     assert 'data-record-range-start="verifier_grounded_xtb_xyz"' in index.text
     assert 'data-record-range-end="verifier_grounded_xtb_xyz"' in index.text
+    assert 'data-record-dataset="verifier_grounded_property_calculation_easy"' in index.text
+    assert 'data-record-range-start="verifier_grounded_property_calculation_easy"' in index.text
+    assert 'data-record-range-end="verifier_grounded_property_calculation_easy"' in index.text
 
 
 def test_preview_rejects_failed_runtime_preflight(
@@ -125,7 +131,7 @@ def test_preview_accepts_record_ids_grouped_by_dataset(
         return_value=("revision", False)
     )
     app.state.service.adapter.release_identity = lambda: {
-        "version": "0.5.0",
+        "version": "0.7.0",
         "wheel_sha256": "a" * 64,
         "datasets": [],
     }
@@ -177,7 +183,7 @@ def test_preview_accepts_record_ranges_by_dataset(
         return_value=("revision", False)
     )
     app.state.service.adapter.release_identity = lambda: {
-        "version": "0.5.0",
+        "version": "0.7.0",
         "wheel_sha256": "a" * 64,
         "datasets": [],
     }

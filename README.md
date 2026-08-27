@@ -60,4 +60,4 @@ uv run --project ~/.openclaw/workspace python -m benchmarking.workflow.cli \
 ```
 
 兼容性身份见 `src/benchmark_orchestrator/compatibility.json`。当前 MVP 支持 OpenClaw skills-on/off 与
-VGB `0.5.0` 的 RDKit、xTB/XYZ、property calculation 三个 track，全局最多一个 active Run。
+VGB `0.7.0` 的 RDKit、xTB/XYZ、property calculation 和 property calculation easy 四个 track，全局最多一个 active Run。

@@ -8,7 +8,7 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("bo-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/styles.css?v=13">
+  <link rel="stylesheet" href="/styles.css?v=14">
   <script defer src="/lucide.min.js?v=0.468.0"></script>
   <script defer src="/app.js?v=14"></script>
 </head>
@@ -92,9 +92,10 @@
           <div class="form-grid" id="formGrid">
             <fieldset class="form-section dataset-section">
               <legend><span>01</span> 数据集</legend>
-              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_rdkit" checked><span class="swatch rdkit"></span><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span><b id="count-rdkit">11</b></label>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_rdkit" checked><span class="swatch rdkit"></span><span><strong>RDKit</strong><small>verifier_grounded_rdkit</small></span><b id="count-rdkit">14</b></label>
               <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_xtb_xyz"><span class="swatch xtb"></span><span><strong>xTB / XYZ</strong><small>verifier_grounded_xtb_xyz</small></span><b id="count-xtb_xyz">20</b></label>
-              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_property_calculation"><span class="swatch property"></span><span><strong>Property</strong><small>property_calculation</small></span><b id="count-property_calculation">2</b></label>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_property_calculation"><span class="swatch property"></span><span><strong>Property</strong><small>verifier_grounded_property_calculation</small></span><b id="count-property_calculation">20</b></label>
+              <label class="choice-row"><input type="checkbox" name="datasets" value="verifier_grounded_property_calculation_easy"><span class="swatch property-easy"></span><span><strong>Property Easy</strong><small>verifier_grounded_property_calculation_easy</small></span><b id="count-property_calculation_easy">51</b></label>
             </fieldset>
 
             <fieldset class="form-section group-section">
@@ -150,6 +151,20 @@
                         <label>从<input type="text" data-record-range-start="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" placeholder="005" aria-label="Property 范围起始题号" autocomplete="off"></label>
                         <span class="record-range-dash" aria-hidden="true">-</span>
                         <label>到<input type="text" data-record-range-end="verifier_grounded_property_calculation" inputmode="numeric" pattern="[0-9]*" placeholder="010" aria-label="Property 范围结束题号" autocomplete="off"></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="record-selector" data-record-selector="verifier_grounded_property_calculation_easy" hidden>
+                  <span class="record-selector-heading"><i class="swatch property-easy"></i><span><strong>Property Easy</strong><small>verifier_grounded_property_calculation_easy</small></span></span>
+                  <div class="record-selector-controls">
+                    <label class="record-id-field"><span class="field-label">直接输入 ID</span><textarea rows="2" data-record-dataset="verifier_grounded_property_calculation_easy" aria-label="Property Easy Record IDs" placeholder="完整 ID 或单个题号；每行或中英文逗号分隔；留空全选"></textarea></label>
+                    <div class="record-range">
+                      <span class="field-label">范围选择</span>
+                      <div class="record-range-inputs">
+                        <label>从<input type="text" data-record-range-start="verifier_grounded_property_calculation_easy" inputmode="numeric" pattern="[0-9]*" placeholder="005" aria-label="Property Easy 范围起始题号" autocomplete="off"></label>
+                        <span class="record-range-dash" aria-hidden="true">-</span>
+                        <label>到<input type="text" data-record-range-end="verifier_grounded_property_calculation_easy" inputmode="numeric" pattern="[0-9]*" placeholder="010" aria-label="Property Easy 范围结束题号" autocomplete="off"></label>
                       </div>
                     </div>
                   </div>
