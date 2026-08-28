@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from unittest.mock import AsyncMock
 
+import yaml
 from fastapi.testclient import TestClient
 
 from benchmark_orchestrator.app import build_app
@@ -106,6 +107,27 @@ def test_invalid_record_id_returns_structured_validation_error(
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_request"
+
+
+def test_run_list_skips_unreadable_legacy_control_sidecar(
+    config: OrchestratorConfig,
+) -> None:
+    app = build_app(config)
+    run = (
+        config.run_root
+        / "formal/verifier-grounded-property-calculation/model/legacy-run"
+    )
+    frozen = seed_controlled_run(app.state.service.registry, run, run_id="legacy-run")
+    spec_path = app.state.service.registry.run_dir(frozen.run_id) / "spec.yaml"
+    payload = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    payload["spec"]["agent"] = {"model": "minimax/MiniMax-M3", "thinking": "high"}
+    spec_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with TestClient(app, base_url="http://127.0.0.1:8875") as client:
+        response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_preview_accepts_record_ids_grouped_by_dataset(

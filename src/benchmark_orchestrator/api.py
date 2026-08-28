@@ -138,12 +138,15 @@ def create_api(
     async def validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # Pydantic includes exception instances (for example in ``ctx.error``)
+        # in some validation details. Convert those values before encoding so
+        # malformed requests still receive the documented JSON 422 response.
         return _error_response(
             422,
             "invalid_request",
             "Request schema validation failed",
             request.state.request_id,
-            jsonable_encoder(exc.errors()),
+            jsonable_encoder(exc.errors(), custom_encoder={ValueError: str}),
         )
 
     @app.get("/api/health")

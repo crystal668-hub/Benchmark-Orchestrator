@@ -369,8 +369,17 @@ class RunService:
         artifact_runs = {item["run_id"]: item for item in self.artifacts.list_runs()}
         controlled_ids = self.registry.list_controlled_run_ids()
         for run_id in controlled_ids:
-            frozen = self.registry.load_frozen(run_id)
-            control = await self.supervisor.reconcile(run_id)
+            try:
+                frozen = self.registry.load_frozen(run_id)
+                control = await self.supervisor.reconcile(run_id)
+            except OrchestratorError as exc:
+                # A legacy or manually damaged sidecar must not make the whole
+                # run index unavailable. Artifact-only runs remain visible via
+                # ``artifact_runs``; controlled runs without readable metadata
+                # are omitted until their sidecar is repaired.
+                if exc.code == "invalid_sidecar":
+                    continue
+                raise
             has_artifacts = run_id in artifact_runs
             if not has_artifacts and control.state not in ACTIVE_STATES:
                 continue
