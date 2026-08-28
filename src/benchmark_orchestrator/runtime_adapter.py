@@ -13,17 +13,19 @@ from typing import Any
 from .config import OrchestratorConfig
 from .models import (
     FrozenRun,
+    MINIMAX_M3_THINKING_LEVELS,
     OrchestratorError,
     RunSpec,
     RecordRange,
     RuntimeCommand,
     SelectionSpec,
     SelectedRecord,
+    THINKING_LEVELS,
+    thinking_levels_for_model,
 )
 
 CLI_PREFIX = ("uv", "run", "--project")
 MVP_GROUPS = ("single_llm_skills_on", "single_llm_skills_off")
-THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh")
 REQUIRED_CLI_FLAGS = (
     "--groups",
     "--datasets",
@@ -114,7 +116,7 @@ class CanonicalCliRuntimeAdapter:
                 raise TypeError("agents.defaults.models must be a non-empty mapping")
             if not isinstance(default_model, str) or not default_model.strip():
                 raise TypeError("agents.defaults.model.primary must be a string")
-            if default_thinking not in THINKING_LEVELS:
+            if default_thinking not in (*THINKING_LEVELS, *MINIMAX_M3_THINKING_LEVELS):
                 raise ValueError(
                     "agents.defaults.thinkingDefault must be one of "
                     + ", ".join(THINKING_LEVELS)
@@ -136,6 +138,9 @@ class CanonicalCliRuntimeAdapter:
                 )
             if default_model not in configured_models:
                 raise ValueError("primary model is not present in agents.defaults.models")
+            supported_default_levels = thinking_levels_for_model(default_model)
+            if default_thinking not in supported_default_levels:
+                default_thinking = supported_default_levels[-1]
             return models, default_model, default_thinking
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise OrchestratorError(
@@ -273,6 +278,10 @@ class CanonicalCliRuntimeAdapter:
             "groups": list(MVP_GROUPS),
             "datasets": release["datasets"],
             "thinking_levels": list(THINKING_LEVELS),
+            "thinking_levels_by_model": {
+                model["id"]: list(thinking_levels_for_model(model["id"]))
+                for model in models
+            },
             "models": models,
             "default_model": default_model,
             "default_thinking": default_thinking,

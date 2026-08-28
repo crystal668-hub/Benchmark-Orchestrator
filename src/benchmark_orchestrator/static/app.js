@@ -1,5 +1,5 @@
 const state = { capabilities: null, preview: null, runs: [], activeRunId: null, pollTimer: null };
-const modelPickerState = { models: [], providers: [], activeProvider: "" };
+const modelPickerState = { models: [], providers: [], activeProvider: "", thinkingLevelsByModel: {} };
 const $ = (selector) => document.querySelector(selector);
 
 async function api(path, options = {}) {
@@ -309,6 +309,16 @@ function chooseModel(modelId) {
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function renderThinkingOptions(modelId, preferredThinking) {
+  const thinking = $("[name=thinking]");
+  const levels = modelPickerState.thinkingLevelsByModel[modelId]
+    || state.capabilities?.thinking_levels
+    || ["off", "minimal", "low", "medium", "high", "xhigh"];
+  const current = preferredThinking || thinking.value;
+  thinking.innerHTML = levels.map((level) => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join("");
+  thinking.value = levels.includes(current) ? current : (levels.includes("adaptive") ? "adaptive" : levels[0]);
+}
+
 function moveMenuFocus(items, current, direction) {
   const index = items.indexOf(current);
   if (index < 0) return;
@@ -384,7 +394,7 @@ function initModelPicker() {
   });
 }
 
-function renderModels(models, defaultModel, defaultThinking) {
+function renderModels(models, defaultModel, defaultThinking, thinkingLevelsByModel = {}) {
   const select = $("#modelSelect");
   select.innerHTML = models.length
     ? models.map((model) => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.label)} · ${escapeHtml(model.provider)}</option>`).join("")
@@ -392,15 +402,13 @@ function renderModels(models, defaultModel, defaultThinking) {
   select.disabled = models.length === 0;
   if (models.some((model) => model.id === defaultModel)) select.value = defaultModel;
   modelPickerState.models = models;
+  modelPickerState.thinkingLevelsByModel = thinkingLevelsByModel;
   modelPickerState.providers = [...new Set(models.map((model) => model.provider))];
   modelPickerState.activeProvider = currentModel()?.provider || modelPickerState.providers[0] || "";
   renderProviderOptions();
   renderModelOptions();
   updateModelPickerValue();
-  const thinking = $("[name=thinking]");
-  if ([...thinking.options].some((option) => option.value === defaultThinking)) {
-    thinking.value = defaultThinking;
-  }
+  renderThinkingOptions(select.value, defaultThinking);
   updateRunName();
 }
 
@@ -415,7 +423,7 @@ async function loadCapabilities() {
   try {
     const payload = await api("/api/capabilities");
     state.capabilities = payload;
-    renderModels(payload.models || [], payload.default_model, payload.default_thinking);
+    renderModels(payload.models || [], payload.default_model, payload.default_thinking, payload.thinking_levels_by_model || {});
     $("#runtimeSignal").className = `runtime-signal ${payload.ready ? "ready" : "failed"}`;
     $("#runtimeLabel").textContent = payload.ready ? `Runtime ready · VGB ${payload.vgb_release.version}` : "Runtime preflight failed";
     $("#runtimeRevision").textContent = payload.runtime_revision ? payload.runtime_revision.slice(0, 10) + (payload.runtime_dirty ? " · dirty" : "") : "revision unknown";
@@ -686,7 +694,10 @@ function initialize() {
   $("#resumeButton").addEventListener("click", () => command("resume"));
   $("#noTimeout").addEventListener("change", (event) => { $("[name=timeout_seconds]").disabled = event.target.checked; });
   initModelPicker();
-  $("#modelSelect").addEventListener("change", updateRunName);
+  $("#modelSelect").addEventListener("change", () => {
+    renderThinkingOptions($("#modelSelect").value);
+    updateRunName();
+  });
   document.querySelectorAll("[name=datasets]").forEach((input) => input.addEventListener("change", () => {
     updateRunName();
     updateRecordSelectors();

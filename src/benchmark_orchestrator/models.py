@@ -14,7 +14,11 @@ DatasetId = Literal[
     "verifier_grounded_property_calculation",
     "verifier_grounded_property_calculation_easy",
 ]
-ThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh"]
+ThinkingLevel = Literal[
+    "off", "minimal", "low", "medium", "high", "xhigh", "adaptive"
+]
+THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh")
+MINIMAX_M3_THINKING_LEVELS = ("off", "adaptive")
 ControlState = Literal[
     "created",
     "starting",
@@ -29,6 +33,25 @@ ACTIVE_STATES = {"starting", "running", "cancelling"}
 TERMINAL_STATES = {"completed", "failed", "cancelled", "interrupted"}
 _RECORD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
 _RECORD_NUMBER = re.compile(r"^\d+$")
+_MINIMAX_M3_MODEL = re.compile(r"^minimax-m3(?:\b|[-.])", re.IGNORECASE)
+
+
+def is_minimax_m3_model(model: str) -> bool:
+    """Return whether a model reference identifies MiniMax-M3."""
+    reference = model.strip()
+    provider, separator, model_name = reference.partition("/")
+    if separator:
+        if provider.lower() not in {"minimax", "minimax-portal"}:
+            return False
+    else:
+        model_name = reference
+    return bool(_MINIMAX_M3_MODEL.match(model_name))
+
+
+def thinking_levels_for_model(model: str) -> tuple[str, ...]:
+    if is_minimax_m3_model(model):
+        return MINIMAX_M3_THINKING_LEVELS
+    return THINKING_LEVELS
 
 
 def utc_now() -> str:
@@ -136,6 +159,16 @@ class AgentSpec(StrictModel):
     model: str = Field(min_length=1, max_length=200)
     thinking: ThinkingLevel = "high"
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_model_default_thinking(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "thinking" in value:
+            return value
+        model = value.get("model")
+        if isinstance(model, str) and is_minimax_m3_model(model):
+            return {**value, "thinking": "adaptive"}
+        return value
+
     @field_validator("model")
     @classmethod
     def validate_model(cls, value: str) -> str:
@@ -204,6 +237,16 @@ class RunSpec(StrictModel):
             raise ValueError(
                 "record selection includes unselected dataset(s): "
                 + ", ".join(sorted(unknown))
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_agent_thinking_for_model(self) -> RunSpec:
+        supported = thinking_levels_for_model(self.agent.model)
+        if self.agent.thinking not in supported:
+            raise ValueError(
+                f"thinking level {self.agent.thinking!r} is not supported for "
+                f"{self.agent.model}. Use one of: {', '.join(supported)}"
             )
         return self
 
