@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -51,6 +52,14 @@ def build_app(config: OrchestratorConfig):
     return app
 
 
+def reload_app():
+    """Create the application for Uvicorn's reload worker process."""
+    config_path = os.environ.get(
+        "BENCHMARK_ORCHESTRATOR_CONFIG", "~/.benchmark-orchestrator/orchestrator.yaml"
+    )
+    return build_app(load_config(config_path))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark Orchestrator local control plane"
@@ -65,12 +74,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    config = load_config(args.config)
+    config_path = Path(args.config).expanduser().resolve()
+    config = load_config(config_path)
+    # The reloader imports the application in a child process, so pass the
+    # explicitly selected config path through an application-specific env var.
+    os.environ["BENCHMARK_ORCHESTRATOR_CONFIG"] = str(config_path)
     uvicorn.run(
-        build_app(config),
+        "benchmark_orchestrator.app:reload_app",
+        factory=True,
         host=config.http.host,
         port=config.http.port,
         log_level="info",
+        reload=True,
     )
 
 
