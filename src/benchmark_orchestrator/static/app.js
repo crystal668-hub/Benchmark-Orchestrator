@@ -302,10 +302,14 @@ function openModelPicker() {
 function chooseModel(modelId) {
   const model = modelPickerState.models.find((item) => item.id === modelId);
   if (!model) return;
+  const previousModel = currentModel();
   const select = $("#modelSelect");
   select.value = model.id;
   updateModelPickerValue();
   closeModelPicker();
+  if (previousModel?.id !== model.id && modelPickerState.thinkingLevelsByModel[model.id]?.includes("adaptive")) {
+    renderThinkingOptions(model.id, "adaptive");
+  }
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
@@ -316,7 +320,12 @@ function renderThinkingOptions(modelId, preferredThinking) {
     || ["off", "minimal", "low", "medium", "high", "xhigh"];
   const current = preferredThinking || thinking.value;
   thinking.innerHTML = levels.map((level) => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join("");
-  thinking.value = levels.includes(current) ? current : (levels.includes("adaptive") ? "adaptive" : levels[0]);
+  const fallback = state.capabilities?.default_thinking;
+  thinking.value = levels.includes(current)
+    ? current
+    : levels.includes(fallback)
+      ? fallback
+      : (levels.includes("adaptive") ? "adaptive" : levels[0]);
 }
 
 function moveMenuFocus(items, current, direction) {

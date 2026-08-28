@@ -7,7 +7,13 @@ import pytest
 from pydantic import ValidationError
 
 from benchmark_orchestrator.config import OrchestratorConfig
-from benchmark_orchestrator.models import FrozenRun, RunSpec, SelectedRecord
+from benchmark_orchestrator.models import (
+    FrozenRun,
+    RunSpec,
+    SelectedRecord,
+    is_minimax_m3_model,
+    thinking_levels_for_model,
+)
 from benchmark_orchestrator.runtime_adapter import CanonicalCliRuntimeAdapter
 from tests.helpers import make_spec
 
@@ -58,6 +64,29 @@ def test_run_spec_accepts_vgb_070_easy_property_dataset() -> None:
     spec = make_spec(datasets=["verifier_grounded_property_calculation_easy"])
 
     assert spec.datasets == ["verifier_grounded_property_calculation_easy"]
+
+
+def test_minimax_m3_uses_adaptive_thinking_only() -> None:
+    for model in ("minimax/MiniMax-M3", "minimax-portal/MiniMax-M3", "minimax-m3"):
+        assert is_minimax_m3_model(model)
+        assert thinking_levels_for_model(model) == ("off", "adaptive")
+
+    assert not is_minimax_m3_model("openai/MiniMax-M3")
+    assert thinking_levels_for_model("openai/gpt-5.6-sol") == (
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    )
+
+
+def test_run_spec_normalizes_m3_default_and_rejects_high() -> None:
+    spec = make_spec(agent={"model": "minimax/MiniMax-M3"})
+    assert spec.agent.thinking == "adaptive"
+    with pytest.raises(ValidationError, match="not supported.*MiniMax-M3"):
+        make_spec(agent={"model": "minimax/MiniMax-M3", "thinking": "high"})
 
 
 def test_run_spec_requires_enough_finite_backoff_values() -> None:
@@ -118,6 +147,28 @@ def test_model_catalog_reads_selectable_openclaw_models(
     ]
     assert default_model == "openai/gpt-5.6-sol"
     assert default_thinking == "medium"
+
+
+def test_model_catalog_falls_back_to_adaptive_for_m3_primary(
+    config: OrchestratorConfig,
+) -> None:
+    config.workspace_root.parent.joinpath("openclaw.json").write_text(
+        """{
+          "agents": {"defaults": {
+            "model": {"primary": "minimax/MiniMax-M3"},
+            "thinkingDefault": "high",
+            "models": {
+              "minimax/MiniMax-M3": {"alias": "minimax-m3"},
+              "openai/gpt-5.6-sol": {"alias": "GPT-5.6 SOL"}
+            }
+          }}
+        }""",
+        encoding="utf-8",
+    )
+    models, default_model, default_thinking = adapter_for(config).model_catalog()
+    assert default_model == "minimax/MiniMax-M3"
+    assert default_thinking == "adaptive"
+    assert models[0]["id"] == "minimax/MiniMax-M3"
 
 
 def frozen_for(config: OrchestratorConfig, spec: RunSpec) -> FrozenRun:

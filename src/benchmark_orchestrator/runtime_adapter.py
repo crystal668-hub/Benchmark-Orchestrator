@@ -119,7 +119,7 @@ class CanonicalCliRuntimeAdapter:
             if default_thinking not in (*THINKING_LEVELS, *MINIMAX_M3_THINKING_LEVELS):
                 raise ValueError(
                     "agents.defaults.thinkingDefault must be one of "
-                    + ", ".join(THINKING_LEVELS)
+                    + ", ".join((*THINKING_LEVELS, "adaptive"))
                 )
             models = []
             for model_id, settings in configured_models.items():
