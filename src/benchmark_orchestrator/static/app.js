@@ -384,7 +384,7 @@ function initModelPicker() {
   });
 }
 
-function renderModels(models, defaultModel) {
+function renderModels(models, defaultModel, defaultThinking) {
   const select = $("#modelSelect");
   select.innerHTML = models.length
     ? models.map((model) => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.label)} · ${escapeHtml(model.provider)}</option>`).join("")
@@ -397,6 +397,10 @@ function renderModels(models, defaultModel) {
   renderProviderOptions();
   renderModelOptions();
   updateModelPickerValue();
+  const thinking = $("[name=thinking]");
+  if ([...thinking.options].some((option) => option.value === defaultThinking)) {
+    thinking.value = defaultThinking;
+  }
   updateRunName();
 }
 
@@ -411,7 +415,7 @@ async function loadCapabilities() {
   try {
     const payload = await api("/api/capabilities");
     state.capabilities = payload;
-    renderModels(payload.models || [], payload.default_model);
+    renderModels(payload.models || [], payload.default_model, payload.default_thinking);
     $("#runtimeSignal").className = `runtime-signal ${payload.ready ? "ready" : "failed"}`;
     $("#runtimeLabel").textContent = payload.ready ? `Runtime ready · VGB ${payload.vgb_release.version}` : "Runtime preflight failed";
     $("#runtimeRevision").textContent = payload.runtime_revision ? payload.runtime_revision.slice(0, 10) + (payload.runtime_dirty ? " · dirty" : "") : "revision unknown";

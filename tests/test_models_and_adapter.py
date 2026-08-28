@@ -102,6 +102,7 @@ def test_model_catalog_reads_selectable_openclaw_models(
         """{
           "agents": {"defaults": {
             "model": {"primary": "openai/gpt-5.6-sol"},
+            "thinkingDefault": "medium",
             "models": {
               "openai/gpt-5.6-sol": {"alias": "GPT-5.6 SOL"},
               "qwen/qwen3.7-max": {}
@@ -110,12 +111,13 @@ def test_model_catalog_reads_selectable_openclaw_models(
         }""",
         encoding="utf-8",
     )
-    models, default_model = adapter_for(config).model_catalog()
+    models, default_model, default_thinking = adapter_for(config).model_catalog()
     assert models == [
         {"id": "openai/gpt-5.6-sol", "label": "GPT-5.6 SOL", "provider": "openai"},
         {"id": "qwen/qwen3.7-max", "label": "qwen3.7-max", "provider": "qwen"},
     ]
     assert default_model == "openai/gpt-5.6-sol"
+    assert default_thinking == "medium"
 
 
 def frozen_for(config: OrchestratorConfig, spec: RunSpec) -> FrozenRun:
