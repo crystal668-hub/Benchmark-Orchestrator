@@ -301,12 +301,10 @@ class LocalRunSupervisor:
         if control.state == "cancelling":
             return control
         handle = self._handles.get(run_id)
-        if handle is None or invocation.ownership != "attached":
-            raise OrchestratorError(
-                "invocation_not_owned",
-                "This Backend does not own the active invocation",
-                status_code=409,
-            )
+        # A Backend restart drops the in-memory process handle and marks the
+        # invocation detached.  The recorded process identity is sufficient
+        # to safely send a termination signal, so cancellation can recover
+        # the run instead of leaving it permanently stuck in ``running``.
         if not await self._identity_matches(invocation):
             raise OrchestratorError(
                 "process_identity_mismatch",
@@ -331,6 +329,10 @@ class LocalRunSupervisor:
         self.registry.save_control(control)
         os.kill(invocation.pid, signal.SIGTERM)
         self._escalations[run_id] = asyncio.create_task(self._escalate(run_id, updated))
+        if handle is None and run_id not in self._detached_monitors:
+            self._detached_monitors[run_id] = asyncio.create_task(
+                self._monitor_detached(run_id)
+            )
         return control
 
     async def _escalate(self, run_id: str, invocation: Invocation) -> None:
@@ -365,9 +367,13 @@ class LocalRunSupervisor:
         frozen = self.registry.load_frozen(run_id)
         if not process_exists(invocation.pid):
             terminal = (
-                "completed"
-                if self.artifacts.final_artifacts_valid(run_id, frozen.selected_pairs)
-                else "interrupted"
+                "cancelled"
+                if invocation.cancel_requested_at is not None
+                else (
+                    "completed"
+                    if self.artifacts.final_artifacts_valid(run_id, frozen.selected_pairs)
+                    else "interrupted"
+                )
             )
             updated = invocation.model_copy(
                 update={

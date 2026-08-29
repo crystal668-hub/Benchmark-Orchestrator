@@ -95,6 +95,35 @@ async def test_cancel_sends_graceful_term_and_preserves_control_state(
     assert terminal.invocations[0].exit_code != 0
 
 
+async def test_cancel_can_recover_detached_invocation_after_backend_restart(
+    config: OrchestratorConfig,
+) -> None:
+    registry = FileControlRegistry(config.control_root)
+    output = config.run_root / "formal/demo/model/run-detached-cancel"
+    frozen = seed_controlled_run(registry, output, run_id="run-detached-cancel")
+    first = LocalRunSupervisor(
+        config.launcher, registry, ArtifactReader(config.run_root)
+    )
+    await first.start(
+        frozen.run_id,
+        command(output, "single_llm_skills_on:rdkit_qed_max_001", delay=5),
+        kind="start",
+        request_id="request-start",
+    )
+
+    # A new backend instance can reconcile the live process but has no local
+    # asyncio process handle.
+    restarted = LocalRunSupervisor(
+        config.launcher, registry, ArtifactReader(config.run_root)
+    )
+    detached = await restarted.reconcile(frozen.run_id)
+    assert detached.invocations[0].ownership == "detached"
+    cancelling = await restarted.cancel(frozen.run_id, "request-cancel")
+    assert cancelling.state == "cancelling"
+    terminal = await wait_terminal(registry, frozen.run_id)
+    assert terminal.state == "cancelled"
+
+
 async def test_resume_boundary_skips_existing_failure_checkpoint(
     config: OrchestratorConfig,
 ) -> None:
