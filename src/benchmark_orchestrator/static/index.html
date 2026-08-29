@@ -43,6 +43,24 @@
           <i data-lucide="plus"></i>
         </button>
       </div>
+      <div class="run-filters" id="runFilters" aria-label="运行记录筛选">
+        <span class="run-filter-kicker">FILTER</span>
+        <div class="run-filter-controls">
+        <details class="run-filter" data-filter="datasets">
+          <summary><span class="run-filter-label">Dataset</span><b data-filter-count="datasets"></b><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+          <div class="run-filter-menu" role="group" aria-label="按 Dataset 筛选" data-filter-options="datasets">
+            <label class="run-filter-option"><input type="checkbox" value="verifier_grounded_rdkit"><span>rdkit</span></label>
+            <label class="run-filter-option"><input type="checkbox" value="verifier_grounded_xtb_xyz"><span>xtb_xyz</span></label>
+            <label class="run-filter-option"><input type="checkbox" value="verifier_grounded_property_calculation"><span>property_calculation</span></label>
+            <label class="run-filter-option"><input type="checkbox" value="verifier_grounded_property_calculation_easy"><span>property_calculation_easy</span></label>
+          </div>
+        </details>
+        <details class="run-filter" data-filter="models">
+          <summary><span class="run-filter-label">运行模型</span><b data-filter-count="models"></b><i data-lucide="chevron-down" aria-hidden="true"></i></summary>
+          <div class="run-filter-menu" role="group" aria-label="按运行模型筛选" data-filter-options="models"><span class="run-filter-empty">正在加载…</span></div>
+        </details>
+        </div>
+      </div>
       <div class="run-list" id="runList"></div>
       <div class="empty-rail" id="emptyRail">暂无受控 Run</div>
     </aside>

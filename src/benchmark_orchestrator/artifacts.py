@@ -307,6 +307,7 @@ class ArtifactReader:
                     "group_count": len(groups),
                     "groups": groups,
                     "datasets": datasets,
+                    "model": run_dir.parent.name,
                     "progress": self.progress(run_dir.name, expected_pairs=pairs),
                     "summary": payload.get("summary")
                     if isinstance(payload.get("summary"), dict)

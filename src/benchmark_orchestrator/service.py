@@ -393,6 +393,7 @@ class RunService:
                     "group_count": len(frozen.spec.groups),
                     "groups": frozen.spec.groups,
                     "datasets": frozen.spec.datasets,
+                    "model": frozen.spec.agent.model,
                     "progress": {
                         "total": len(frozen.selected_pairs),
                         "completed": 0,
@@ -412,6 +413,7 @@ class RunService:
             }
             entry["status_view"] = self._status_view(control.state, artifact["state"])
             entry["created_at"] = frozen.created_at
+            entry["model"] = frozen.spec.agent.model
         rows: list[dict[str, Any]] = []
         for entry in artifact_runs.values():
             metadata = self.annotations.metadata(entry["run_id"])

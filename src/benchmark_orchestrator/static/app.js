@@ -1,4 +1,4 @@
-const state = { capabilities: null, preview: null, runs: [], activeRunId: null, pollTimer: null };
+const state = { capabilities: null, preview: null, runs: [], activeRunId: null, pollTimer: null, runFilters: { datasets: new Set(), models: new Set() } };
 const modelPickerState = { models: [], providers: [], activeProvider: "", thinkingLevelsByModel: {} };
 const $ = (selector) => document.querySelector(selector);
 
@@ -433,6 +433,7 @@ async function loadCapabilities() {
     const payload = await api("/api/capabilities");
     state.capabilities = payload;
     renderModels(payload.models || [], payload.default_model, payload.default_thinking, payload.thinking_levels_by_model || {});
+    renderRunFilters();
     $("#runtimeSignal").className = `runtime-signal ${payload.ready ? "ready" : "failed"}`;
     $("#runtimeLabel").textContent = payload.ready ? `Runtime ready · VGB ${payload.vgb_release.version}` : "Runtime preflight failed";
     $("#runtimeRevision").textContent = payload.runtime_revision ? payload.runtime_revision.slice(0, 10) + (payload.runtime_dirty ? " · dirty" : "") : "revision unknown";
@@ -444,6 +445,7 @@ async function loadCapabilities() {
     }
   } catch (error) {
     state.capabilities = null;
+    renderRunFilters();
     updateRuntimeControls();
     $("#runtimeSignal").className = "runtime-signal failed";
     $("#runtimeLabel").textContent = "Runtime unavailable";
@@ -454,6 +456,7 @@ async function loadCapabilities() {
 async function loadRuns() {
   try {
     state.runs = await api("/api/runs");
+    renderRunFilters();
     renderRunList();
   } catch (error) { toast(error.message, true); }
 }
@@ -470,10 +473,52 @@ function stateClass(value) {
   return value === "completed_with_recovery" ? "recovered" : value || "history";
 }
 
+function runModel(run) {
+  return String(run.model || run.model_slug || "").trim();
+}
+
+function runMatchesFilters(run) {
+  const { datasets, models } = state.runFilters;
+  const runDatasets = new Set(run.datasets || []);
+  const model = runModel(run);
+  const datasetMatch = !datasets.size || [...datasets].some((value) => runDatasets.has(value));
+  const modelMatch = !models.size || models.has(model);
+  return datasetMatch && modelMatch;
+}
+
+function renderRunFilters() {
+  const capabilityDatasets = (state.capabilities?.datasets || []).map((item) => item.id).filter(Boolean);
+  const formDatasets = [...document.querySelectorAll("[name=datasets]")].map((input) => input.value).filter(Boolean);
+  const capabilityModels = (state.capabilities?.models || []).map((item) => item.id).filter(Boolean);
+  const dimensions = {
+    datasets: [...new Set([...formDatasets, ...capabilityDatasets, ...state.runs.flatMap((run) => run.datasets || [])])].sort(),
+    models: [...new Set([...capabilityModels, ...state.runs.map(runModel).filter(Boolean)])].sort(),
+  };
+  for (const [dimension, values] of Object.entries(dimensions)) {
+    const selected = state.runFilters[dimension];
+    for (const value of [...selected]) if (!values.includes(value)) selected.delete(value);
+    const options = document.querySelector(`[data-filter-options="${dimension}"]`);
+    if (!options) continue;
+    options.innerHTML = values.length
+      ? values.map((value) => {
+        const checked = selected.has(value);
+        const label = dimension === "datasets" ? value.replace("verifier_grounded_", "") : value;
+        return `<label class="run-filter-option"><input type="checkbox" value="${escapeHtml(value)}"${checked ? " checked" : ""}><span>${escapeHtml(label)}</span></label>`;
+      }).join("")
+      : `<span class="run-filter-empty">${state.capabilities ? "暂无可筛选项" : "正在加载…"}</span>`;
+    const count = document.querySelector(`[data-filter-count="${dimension}"]`);
+    if (count) count.textContent = selected.size ? String(selected.size) : "";
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
 function renderRunList() {
   const list = $("#runList");
-  $("#emptyRail").hidden = state.runs.length > 0;
-  list.innerHTML = state.runs.map((run) => {
+  const runs = state.runs.filter(runMatchesFilters);
+  const empty = $("#emptyRail");
+  empty.hidden = runs.length > 0;
+  empty.textContent = state.runs.length && !runs.length ? "没有匹配的运行记录" : "暂无受控 Run";
+  list.innerHTML = runs.map((run) => {
     const controlState = run.status_view?.effective_state || run.control?.state || run.status || "history";
     const completed = run.progress?.completed || 0;
     const total = run.progress?.total || (run.record_count || 0) * Math.max(run.group_count || 1, 1);
@@ -486,6 +531,19 @@ function renderRunList() {
     document.body.classList.remove("rail-open");
     openRun(button.dataset.runId);
   }));
+}
+
+function initRunFilters() {
+  $("#runFilters").addEventListener("change", (event) => {
+    const input = event.target.closest(".run-filter-option input");
+    if (!input) return;
+    const dimension = input.closest(".run-filter")?.dataset.filter;
+    if (!dimension) return;
+    if (input.checked) state.runFilters[dimension].add(input.value);
+    else state.runFilters[dimension].delete(input.value);
+    renderRunFilters();
+    renderRunList();
+  });
 }
 
 function formSpec() {
@@ -701,6 +759,7 @@ function initialize() {
   $("#railScrim").addEventListener("click", () => document.body.classList.remove("rail-open"));
   $("#cancelButton").addEventListener("click", () => command("cancel"));
   $("#resumeButton").addEventListener("click", () => command("resume"));
+  initRunFilters();
   $("#noTimeout").addEventListener("change", (event) => { $("[name=timeout_seconds]").disabled = event.target.checked; });
   initModelPicker();
   $("#modelSelect").addEventListener("change", () => {
