@@ -474,7 +474,22 @@ function stateClass(value) {
 }
 
 function runModel(run) {
-  return String(run.model || run.model_slug || "").trim();
+  return canonicalModel(run.model || run.model_slug || "");
+}
+
+function canonicalModel(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const catalog = state.capabilities?.models || [];
+  if (text.includes("/")) return text;
+  const slugged = slug(text);
+  const catalogMatch = catalog.find((item) => slug(item.id) === slugged || slug(item.id.split("/").at(-1)) === slugged);
+  if (catalogMatch?.id?.includes("/")) return catalogMatch.id;
+  const provider = [
+    ["gpt", "openai"], ["qwen", "qwen"], ["kimi", "kimi"], ["deepseek", "deepseek"],
+    ["minimax", "minimax"], ["claude", "anthropic"], ["gemini", "google"],
+  ].find(([prefix]) => slugged.startsWith(prefix))?.[1];
+  return provider ? `${provider}/${text}` : `legacy/${text}`;
 }
 
 function runMatchesFilters(run) {
@@ -489,9 +504,10 @@ function runMatchesFilters(run) {
 function renderRunFilters() {
   const capabilityDatasets = (state.capabilities?.datasets || []).map((item) => item.id).filter(Boolean);
   const formDatasets = [...document.querySelectorAll("[name=datasets]")].map((input) => input.value).filter(Boolean);
-  const capabilityModels = (state.capabilities?.models || []).map((item) => item.id).filter(Boolean);
+  const capabilityModels = (state.capabilities?.models || []).map((item) => canonicalModel(item.id)).filter(Boolean);
+  const supportedDatasets = capabilityDatasets.length ? capabilityDatasets : formDatasets;
   const dimensions = {
-    datasets: [...new Set([...formDatasets, ...capabilityDatasets, ...state.runs.flatMap((run) => run.datasets || [])])].sort(),
+    datasets: [...new Set(supportedDatasets)].sort(),
     models: [...new Set([...capabilityModels, ...state.runs.map(runModel).filter(Boolean)])].sort(),
   };
   for (const [dimension, values] of Object.entries(dimensions)) {
